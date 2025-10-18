@@ -1,0 +1,967 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>SmartReceipt — Advanced Premium Edition</title>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+
+  <style>
+    /* ===== Theme variables (updated by JS theme switcher) ===== */
+    :root{
+      --grad1: #4f46e5;
+      --grad2: #0ea5e9;
+      --grad3: #3b82f6;
+      --glass-bg: rgba(255,255,255,0.12);
+      --glass-border: rgba(255,255,255,0.25);
+      --input-bg: rgba(255,255,255,0.18);
+      --muted: rgba(255,255,255,0.85);
+      --admin-bg: #0b1220; /* solid admin background */
+    }
+
+    /* Make page always scrollable (no internal locked scroll),
+       keep container vertically centered but avoid header jumping on mobile keyboard. */
+    html,body{height:100%}
+    body{
+      margin:0;
+      font-family: Inter, system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial;
+      -webkit-font-smoothing:antialiased;
+      -moz-osx-font-smoothing:grayscale;
+      background: linear-gradient(135deg,var(--grad1),var(--grad2),var(--grad3));
+      background-size: 400% 400%;
+      animation: gradientShift 10s ease infinite;
+      display:block; /* allow normal document flow */
+      min-height:100vh;
+      padding:28px; /* give space for keyboard on mobile */
+      box-sizing:border-box;
+    }
+    @keyframes gradientShift{
+      0%{background-position:0% 50%}
+      50%{background-position:100% 50%}
+      100%{background-position:0% 50%}
+    }
+
+    /* central wrapper to center container but allow page scrolling */
+    .page-wrap{
+      display:flex;
+      justify-content:center;
+      align-items:flex-start; /* allow container to stay visible and not jump when keyboard opens */
+      width:100%;
+      margin:0 auto;
+    }
+
+    /* ===== Glass card ===== */
+    .container{
+      width:92%;
+      max-width:980px;
+      padding:28px;
+      border-radius:18px;
+      background:var(--glass-bg);
+      box-shadow: 0 12px 45px rgba(0,0,0,0.30);
+      border: 1px solid var(--glass-border);
+      backdrop-filter: blur(18px) saturate(120%);
+      -webkit-backdrop-filter: blur(18px) saturate(120%);
+      color: #fff;
+      box-sizing:border-box;
+      margin-bottom: 32px;
+    }
+
+    /* ===== header area: status badge + title (fixed layout to prevent overlap) ===== */
+    .header-row{
+      display:flex;
+      align-items:center;
+      justify-content:center;
+      gap:12px;
+      position:relative;
+    }
+    .status-badge {
+      position: absolute;
+      left: 16px;
+      top: 12px;
+      background: rgba(255,255,255,0.06);
+      padding: 8px 12px;
+      border-radius: 12px;
+      font-weight: 700;
+      font-size: 0.88rem;
+      white-space:nowrap;
+    }
+    h1{
+      margin:0 0 8px 0;
+      font-size:1.6rem;
+      text-align:center;
+      font-weight:700;
+      letter-spacing:0.2px;
+      cursor: pointer;
+      user-select: none;
+    }
+
+    /* ===== form layout ===== */
+    .row{display:flex;gap:12px}
+    .col{flex:1}
+    form{margin-top:12px}
+    label{
+      display:block;
+      margin-top:12px;
+      font-weight:600;
+      color:var(--muted);
+      font-size:0.95rem;
+    }
+
+    /* make specified inputs bold visually */
+    input, textarea, select{
+      width:100%;
+      padding:9px 10px;
+      margin-top:6px;
+      border-radius:8px;
+      border:1px solid rgba(255,255,255,0.18);
+      background:var(--input-bg);
+      color:#fff;
+      font-size:14px;
+      outline:none;
+      box-sizing:border-box;
+    }
+
+    input::placeholder, textarea::placeholder { color: rgba(255,255,255,0.75); }
+
+    /* class to bold certain inputs' text */
+    .bold-input{ font-weight:700; color:#fff; }
+
+    /* small file input tweak */
+    input[type="file"]{ padding:6px 8px; background: transparent; }
+
+    .logo-preview, .signature-preview{
+      margin-top:8px;
+      text-align:center;
+    }
+    .logo-preview img, .signature-preview img{
+      max-width:140px;
+      height:auto;
+      border-radius:8px;
+      border:1px solid rgba(255,255,255,0.18);
+      display:block;
+      margin:8px auto 6px;
+      background: rgba(255,255,255,0.06);
+      padding:6px;
+    }
+
+    .remove-btn{
+      margin-top:6px;
+      background: rgba(239,68,68,0.9);
+      color:#fff;
+      padding:7px 10px;
+      border-radius:8px;
+      border:none;
+      cursor:pointer;
+      font-weight:600;
+    }
+
+    .remove-btn:hover{ transform:translateY(-1px); }
+
+    .actions{
+      margin-top:18px;
+      display:flex;
+      gap:10px;
+      flex-wrap:wrap;
+    }
+    button{
+      background: rgba(255,255,255,0.18);
+      color:#fff;
+      border:none;
+      padding:10px 14px;
+      border-radius:10px;
+      cursor:pointer;
+      font-weight:700;
+      min-width:150px;
+    }
+    button:disabled{ opacity:0.5; cursor:default; }
+
+    .preview{
+      margin-top:18px;
+      padding:12px;
+      border-radius:8px;
+      background: rgba(255,255,255,0.08);
+      border: 1px dashed rgba(255,255,255,0.12);
+      color:#fff;
+    }
+
+    /* Theme toggles */
+    .theme-switcher{ display:flex; gap:8px; justify-content:center; margin-top:12px; }
+    .theme-btn{ padding:8px 10px; border-radius:8px; border:1px solid rgba(255,255,255,0.12); cursor:pointer; background:transparent; color:#fff; font-weight:700;}
+    .theme-btn.active{ box-shadow: 0 6px 20px rgba(0,0,0,0.25); transform:translateY(-2px); }
+
+    /* responsive */
+    @media (max-width:920px){
+      .row{flex-direction:column}
+      .actions{flex-direction:column}
+      button{width:100%}
+      .status-badge{ left: 12px; top: 10px; }
+    }
+
+    /* ===== modal backdrop ===== */
+    .modal-backdrop {
+      position: fixed;
+      inset: 0;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      background: rgba(0, 0, 0, 0.6);
+      z-index: 9999;
+      opacity: 0;
+      pointer-events: none;
+      transition: opacity 0.18s ease;
+      padding: 18px;
+    }
+    .modal-backdrop.show {
+      opacity: 1;
+      pointer-events: auto;
+    }
+
+    /* activation modal (glass) */
+    .modal {
+      width: 100%;
+      max-width: 640px;
+      border-radius: 12px;
+      padding: 16px;
+      background: linear-gradient(180deg, rgba(255,255,255,0.04), rgba(255,255,255,0.02));
+      border: 1px solid rgba(255,255,255,0.08);
+      color: #fff;
+      box-shadow: 0 12px 40px rgba(0, 0, 0, 0.6);
+      box-sizing: border-box;
+    }
+
+    /* admin panel (fullscreen solid) */
+    .admin-fullscreen {
+      position: fixed;
+      inset: 0;
+      background: var(--admin-bg);
+      color: #fff;
+      z-index: 20000;
+      display: none;
+      padding: 28px;
+      overflow:auto;
+      box-sizing:border-box;
+    }
+    .admin-fullscreen.show { display:block; }
+
+    .admin-header { display:flex; align-items:center; justify-content:space-between; gap:12px; margin-bottom:12px; }
+    .admin-title { font-size:1.4rem; font-weight:700; }
+    .admin-actions { display:flex; gap:8px; align-items:center; }
+
+    .admin-panel-box { background: #071026; padding:12px; border-radius:8px; border:1px solid rgba(255,255,255,0.04); }
+
+    table.admin-table { width:100%; border-collapse:collapse; margin-top:12px; font-size:0.95rem; }
+    table.admin-table th, table.admin-table td { border:1px solid rgba(255,255,255,0.06); padding:8px; text-align:left; vertical-align:middle; }
+    table.admin-table th { background: rgba(255,255,255,0.03); font-weight:700; }
+
+    .pill { padding:6px 10px; border-radius:999px; background: rgba(255,255,255,0.04); font-weight:700; display:inline-block; }
+
+    /* small screens admin layout */
+    @media (max-width:720px){
+      .admin-header { flex-direction:column; align-items:flex-start; gap:8px; }
+      table.admin-table { font-size:0.8rem; }
+    }
+  </style>
+</head>
+<body>
+  <div class="page-wrap">
+    <div class="container" role="region" aria-label="SmartReceipt Form">
+      <div class="header-row">
+        <div id="statusBadge" class="status-badge" aria-live="polite">Pro: Not activated</div>
+        <h1 id="appTitle">SmartReceipt — Advanced Premium</h1>
+      </div>
+
+      <!-- Theme switcher -->
+      <div class="theme-switcher" aria-hidden="false">
+        <button class="theme-btn active" data-theme="blue" id="themeBlue">Blue</button>
+        <button class="theme-btn" data-theme="green" id="themeGreen">Green</button>
+        <button class="theme-btn" data-theme="gold" id="themeGold">Gold</button>
+      </div>
+
+      <form id="receiptForm" autocomplete="off" onsubmit="return false;">
+        <!-- Business details -->
+        <label>Business Name
+          <input id="businessName" placeholder="e.g. KingsNet Web Solutions" required>
+        </label>
+
+        <div class="row">
+          <div class="col">
+            <label>Business Contact
+              <input id="businessContact" placeholder="+233 20 000 0000" required>
+            </label>
+          </div>
+          <div class="col">
+            <label>Business Email
+              <input id="businessEmail" type="email" placeholder="info@business.com" required>
+            </label>
+          </div>
+        </div>
+
+        <!-- Logo upload -->
+        <label>Upload Business Logo
+          <input id="businessLogo" type="file" accept="image/*">
+        </label>
+        <div class="logo-preview" id="logoPreview">No logo uploaded</div>
+
+        <!-- Payer and amounts -->
+        <label style="margin-top:14px;">Payer Name
+          <input id="payerName" class="bold-input" placeholder="Full name of payer" required>
+        </label>
+
+        <div class="row">
+          <div class="col">
+            <label>Total Amount
+              <input id="totalAmount" type="number" class="bold-input" step="0.01" placeholder="Total amount (GHS)" required>
+            </label>
+          </div>
+          <div class="col">
+            <label>Amount Paid
+              <input id="amountPaid" type="number" class="bold-input" step="0.01" placeholder="Amount paid (GHS)" required>
+            </label>
+          </div>
+        </div>
+
+        <div class="row">
+          <div class="col">
+            <label>Arrears
+              <input id="arrears" type="text" class="bold-input" placeholder="Auto-calculated" readonly>
+            </label>
+          </div>
+          <div class="col">
+            <label>Date
+              <input id="date" type="date" class="bold-input">
+            </label>
+          </div>
+        </div>
+
+        <label>Purpose
+          <textarea id="purpose" rows="2" placeholder="Payment for..."></textarea>
+        </label>
+
+        <!-- Signature upload -->
+        <label>Upload Digital Signature
+          <input id="signatureUpload" type="file" accept="image/*">
+        </label>
+        <div class="signature-preview" id="signaturePreview">No signature uploaded</div>
+
+        <!-- Actions -->
+        <div class="actions" role="group" aria-label="actions">
+          <button type="button" id="generate">Generate PDF</button>
+          <button type="button" id="download" disabled>Download PDF</button>
+          <button type="button" id="whatsapp">Share via WhatsApp</button>
+          <button type="button" id="copySummary">Copy Summary</button>
+          <button type="button" id="activateBtnUI">Activate to Pro</button>
+        </div>
+      </form>
+
+      <div id="preview" class="preview">PDF not generated yet.</div>
+    </div>
+  </div>
+
+  <!-- Activation modal -->
+  <div id="proModalBackdrop" class="modal-backdrop" aria-hidden="true">
+    <div class="modal" role="dialog" aria-modal="true" aria-labelledby="proModalTitle">
+      <h2 id="proModalTitle">Activate SmartReceipt Pro</h2>
+
+      <label>Email
+        <input id="licenseEmail" placeholder="you@example.com" type="email" />
+      </label>
+
+      <label>License Key
+        <input id="licenseKeyInput" placeholder="e.g. SR-ABCD-EFGH-IJKL" />
+      </label>
+
+      <div style="display:flex;gap:8px;justify-content:center;margin-top:12px;">
+        <button id="modalActivateBtn" style="background: #22c55e; color: #fff">Activate</button>
+        <button id="modalCloseBtn" style="background: rgba(255,255,255,0.08); color:#fff">Close</button>
+      </div>
+
+      <p id="activationMsg" style="text-align:center;margin-top:10px;color:#fca5a5;font-weight:700"></p>
+      <p class="muted" style="margin-top:10px">(Activation matches key/email created by admin; stored locally.)</p>
+    </div>
+  </div>
+
+  <!-- Admin PIN modal (small) -->
+  <div id="adminPinBackdrop" class="modal-backdrop" aria-hidden="true">
+    <div class="modal" role="dialog" aria-modal="true" aria-labelledby="adminPinTitle">
+      <h3 id="adminPinTitle">Admin — Enter PIN</h3>
+      <p class="muted">Enter PIN to unlock the admin panel.</p>
+      <input id="adminPinInput" type="password" placeholder="Enter PIN" style="margin-top:8px" />
+      <div style="display:flex;gap:8px;justify-content:center;margin-top:12px;">
+        <button id="adminPinSubmit" style="background:#2563eb;color:#fff">Unlock</button>
+        <button id="adminPinClose" style="background: rgba(255,255,255,0.08); color:#fff">Close</button>
+      </div>
+      <p id="adminPinMsg" style="text-align:center;margin-top:8px;color:#fca5a5;font-weight:700"></p>
+    </div>
+  </div>
+
+  <!-- Admin fullscreen modal (solid background) -->
+  <div id="adminFullscreen" class="admin-fullscreen" aria-hidden="true">
+    <div class="admin-header">
+      <div>
+        <div class="admin-title">Admin — License Manager</div>
+        <div class="muted" style="margin-top:6px">Solid admin interface — manage keys & activations</div>
+      </div>
+      <div class="admin-actions">
+        <button id="closeAdminBtn" style="background:#ef4444;color:#fff;border:none;padding:8px 12px;border-radius:8px;font-weight:700">Close</button>
+      </div>
+    </div>
+
+    <div class="admin-panel-box">
+      <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">
+        <input id="newKeyEmail" placeholder="user@example.com" style="flex:1;min-width:200px;padding:8px;border-radius:6px;border:1px solid rgba(255,255,255,0.06);background:transparent;color:#fff" />
+        <select id="newKeyDuration" style="padding:8px;border-radius:6px;border:1px solid rgba(255,255,255,0.06);background:transparent;color:#fff">
+          <option value="15">15 days</option>
+          <option value="30" selected>30 days</option>
+          <option value="60">60 days</option>
+        </select>
+        <button id="generateKeyBtn" style="background:#16a34a;color:#fff;padding:8px 12px;border-radius:8px;border:none;font-weight:700">Generate Key</button>
+        <button id="manualActivateBtn" style="background:#2563eb;color:#fff;padding:8px 12px;border-radius:8px;border:none;font-weight:700">Manual Activate</button>
+      </div>
+
+      <div style="margin-top:12px">
+        <table class="admin-table" style="width:100%;border-collapse:collapse">
+          <thead>
+            <tr style="text-align:left">
+              <th>Email</th>
+              <th>License Key</th>
+              <th>Duration</th>
+              <th>Activated</th>
+              <th>Expires</th>
+              <th>Actions</th>
+            </tr>
+          </thead>
+          <tbody id="adminKeysList" class="admin-list"></tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  <script>
+  (function(){
+    // Elements (main)
+    const appTitle = document.getElementById('appTitle');
+    const themeBtns = document.querySelectorAll('.theme-btn');
+    const statusBadge = document.getElementById('statusBadge');
+
+    // Activation modal
+    const proModalBackdrop = document.getElementById('proModalBackdrop');
+    const licenseEmail = document.getElementById('licenseEmail');
+    const licenseKeyInput = document.getElementById('licenseKeyInput');
+    const modalActivateBtn = document.getElementById('modalActivateBtn');
+    const modalCloseBtn = document.getElementById('modalCloseBtn');
+    const activationMsg = document.getElementById('activationMsg');
+
+    // Admin pin & fullscreen
+    const adminPinBackdrop = document.getElementById('adminPinBackdrop');
+    const adminPinStage = document.getElementById('adminPinBackdrop');
+    const adminPinInput = document.getElementById('adminPinInput');
+    const adminPinSubmit = document.getElementById('adminPinSubmit');
+    const adminPinClose = document.getElementById('adminPinClose');
+    const adminPinMsg = document.getElementById('adminPinMsg');
+
+    const adminFullscreen = document.getElementById('adminFullscreen');
+    const adminKeysList = document.getElementById('adminKeysList');
+    const newKeyEmail = document.getElementById('newKeyEmail');
+    const newKeyDuration = document.getElementById('newKeyDuration');
+    const generateKeyBtn = document.getElementById('generateKeyBtn');
+    const closeAdminBtn = document.getElementById('closeAdminBtn');
+    const manualActivateBtn = document.getElementById('manualActivateBtn');
+
+    // Receipt form elements
+    const generateBtn = document.getElementById('generate');
+    const downloadBtn = document.getElementById('download');
+    const whatsappBtn = document.getElementById('whatsapp');
+    const copyBtn = document.getElementById('copySummary');
+    const preview = document.getElementById('preview');
+
+    const businessNameEl = document.getElementById('businessName');
+    const businessContactEl = document.getElementById('businessContact');
+    const businessEmailEl = document.getElementById('businessEmail');
+    const payerNameEl = document.getElementById('payerName');
+    const totalAmountEl = document.getElementById('totalAmount');
+    const amountPaidEl = document.getElementById('amountPaid');
+    const arrearsEl = document.getElementById('arrears');
+    const dateEl = document.getElementById('date');
+    const purposeEl = document.getElementById('purpose');
+    const businessLogo = document.getElementById('businessLogo');
+    const logoPreview = document.getElementById('logoPreview');
+    const signatureUpload = document.getElementById('signatureUpload');
+    const signaturePreview = document.getElementById('signaturePreview');
+
+    // State & storage keys
+    const LS_KEYS = "sr_generatedKeys"; // array of { key, email, durationDays, createdAt, activatedAt, expiresAt }
+    const LS_CURRENT_ACT = "sr_currentActivation";
+    const LS_ACTIVE = "sr_activeLicense";
+    const ADMIN_PIN = localStorage.getItem('sr_adminPin') || "2468";
+
+    // Default date to today
+    dateEl.value = new Date().toISOString().slice(0,10);
+
+    // Theme switcher
+    function setTheme(theme){
+      themeBtns.forEach(b => b.classList.remove('active'));
+      if(theme === 'green'){
+        document.getElementById('themeGreen').classList.add('active');
+        document.documentElement.style.setProperty('--grad1', '#059669');
+        document.documentElement.style.setProperty('--grad2', '#10b981');
+        document.documentElement.style.setProperty('--grad3', '#06b6d4');
+      } else if(theme === 'gold'){
+        document.getElementById('themeGold').classList.add('active');
+        document.documentElement.style.setProperty('--grad1', '#d97706');
+        document.documentElement.style.setProperty('--grad2', '#f59e0b');
+        document.documentElement.style.setProperty('--grad3', '#eab308');
+      } else {
+        document.getElementById('themeBlue').classList.add('active');
+        document.documentElement.style.setProperty('--grad1', '#4f46e5');
+        document.documentElement.style.setProperty('--grad2', '#0ea5e9');
+        document.documentElement.style.setProperty('--grad3', '#3b82f6');
+      }
+    }
+    themeBtns.forEach(btn => btn.addEventListener('click', ()=> setTheme(btn.dataset.theme)));
+    setTheme('blue');
+
+    // File preview helper
+    function setupFilePreview(inputEl, previewEl, setDataFn, opt = {maxWidth:140}) {
+      inputEl.addEventListener('change', function(){
+        const file = this.files && this.files[0];
+        if(!file){ setDataFn(null); previewEl.textContent = 'No image uploaded'; return; }
+        const reader = new FileReader();
+        reader.onload = e => {
+          const dataURL = e.target.result;
+          setDataFn(dataURL);
+          previewEl.innerHTML = '';
+          const img = document.createElement('img');
+          img.src = dataURL;
+          img.alt = 'Preview';
+          img.style.maxWidth = (opt.maxWidth || 140) + 'px';
+          previewEl.appendChild(img);
+
+          const removeBtn = document.createElement('button');
+          removeBtn.type = 'button';
+          removeBtn.className = 'remove-btn';
+          removeBtn.innerText = 'Remove';
+          removeBtn.onclick = ()=>{
+            setDataFn(null);
+            inputEl.value = '';
+            previewEl.textContent = 'No image uploaded';
+          };
+          previewEl.appendChild(removeBtn);
+        };
+        reader.readAsDataURL(file);
+      });
+    }
+
+    let logoDataURL = null;
+    let signatureDataURL = null;
+    setupFilePreview(businessLogo, logoPreview, v => logoDataURL = v, {maxWidth:140});
+    setupFilePreview(signatureUpload, signaturePreview, v => signatureDataURL = v, {maxWidth:160});
+
+    // Arrears auto-calc: arrears = total - paid
+    function updateArrears(){
+      const total = parseFloat(totalAmountEl.value) || 0;
+      const paid = parseFloat(amountPaidEl.value) || 0;
+      const diff = (total - paid);
+      arrearsEl.value = diff.toFixed(2);
+    }
+    totalAmountEl.addEventListener('input', updateArrears);
+    amountPaidEl.addEventListener('input', updateArrears);
+
+    // Storage helpers
+    function readKeys() {
+      try {
+        const raw = localStorage.getItem(LS_KEYS);
+        return raw ? JSON.parse(raw) : [];
+      } catch(e) { return []; }
+    }
+    function writeKeys(arr) { localStorage.setItem(LS_KEYS, JSON.stringify(arr)); }
+
+    // Generate SR-XXXX-XXXX-XXXX
+    function generateSRKey() {
+      const chunk = () => Math.random().toString(36).substr(2,5).toUpperCase().replace(/[^A-Z0-9]/g,'A').padEnd(5,'A');
+      return `SR-${chunk()}-${chunk()}-${chunk()}`;
+    }
+
+    // Admin list rendering
+    function renderAdminKeys(){
+      const arr = readKeys();
+      adminKeysList.innerHTML = '';
+      if(arr.length === 0){
+        adminKeysList.innerHTML = '<tr><td colspan="6" style="color:rgba(255,255,255,0.6);padding:12px">No keys yet</td></tr>';
+        return;
+      }
+      arr.slice().reverse().forEach(rec => {
+        const tr = document.createElement('tr');
+        const activated = rec.activatedAt ? (new Date(rec.activatedAt)).toLocaleString() : '-';
+        const expires = rec.expiresAt ? (new Date(rec.expiresAt)).toLocaleString() : '-';
+        tr.innerHTML = `
+          <td style="padding:8px">${rec.email || '(no email)'}</td>
+          <td style="padding:8px">${rec.key}</td>
+          <td style="padding:8px">${rec.durationDays}d</td>
+          <td style="padding:8px">${activated}</td>
+          <td style="padding:8px">${expires}</td>
+          <td style="padding:8px">
+            <button data-key="${rec.key}" class="copyKey" style="margin-right:6px">Copy</button>
+            <button data-key="${rec.key}" class="deleteKey" style="background:#ef4444;color:#fff;border:none;padding:6px 8px;border-radius:6px">Delete</button>
+          </td>
+        `;
+        adminKeysList.appendChild(tr);
+      });
+
+      // attach handlers
+      document.querySelectorAll('.copyKey').forEach(btn => {
+        btn.addEventListener('click', () => {
+          const key = btn.getAttribute('data-key');
+          navigator.clipboard.writeText(key).then(()=> alert('Key copied to clipboard'));
+        });
+      });
+      document.querySelectorAll('.deleteKey').forEach(btn => {
+        btn.addEventListener('click', ()=> {
+          if(!confirm('Delete this key?')) return;
+          const key = btn.getAttribute('data-key');
+          const survivors = readKeys().filter(k => k.key !== key);
+          writeKeys(survivors);
+          // clear active if matches
+          const active = JSON.parse(localStorage.getItem(LS_ACTIVE) || 'null');
+          if(active && active.key === key) localStorage.removeItem(LS_ACTIVE);
+          renderAdminKeys();
+          updateStatusBadge();
+        });
+      });
+    }
+
+    // Update status badge based on active license
+    function isActivationValid(rec){
+      if(!rec || !rec.expiresAt) return false;
+      return new Date(rec.expiresAt).getTime() > Date.now();
+    }
+    function getCurrentActivation(){
+      try {
+        const raw = localStorage.getItem(LS_ACTIVE);
+        if(!raw) return null;
+        const cur = JSON.parse(raw);
+        // ensure it still matches a stored key and is valid
+        const rec = readKeys().find(k => k.key === cur.key && (k.email||'').toLowerCase() === (cur.email||'').toLowerCase());
+        if(rec && rec.activatedAt && isActivationValid(rec)) return rec;
+      } catch(e){}
+      return null;
+    }
+    function updateStatusBadge(){
+      const cur = getCurrentActivation();
+      if(cur && isActivationValid(cur)){
+        const daysLeft = Math.ceil((new Date(cur.expiresAt).getTime() - Date.now())/(24*3600*1000));
+        statusBadge.textContent = `🔓 Pro — ${cur.email} (${daysLeft} day${daysLeft!==1?'s':''} left)`;
+      } else {
+        statusBadge.textContent = `🔒 Pro: Not activated`;
+      }
+    }
+
+    // Admin: generate key
+    generateKeyBtn.addEventListener('click', ()=>{
+      const email = (newKeyEmail.value || '').trim();
+      const durationDays = Number(newKeyDuration.value || 30);
+      if(!email){ alert('Please enter an email to assign the key to.'); return; }
+      if(![15,30,60].includes(durationDays)){ alert('Invalid duration'); return; }
+      const key = generateSRKey();
+      const now = new Date();
+      const rec = { key, email, durationDays, createdAt: now.toISOString(), activatedAt: null, expiresAt: null };
+      const arr = readKeys(); arr.push(rec); writeKeys(arr);
+      newKeyEmail.value = '';
+      renderAdminKeys();
+      alert(`Key created for ${rec.email}\nKey: ${rec.key}`);
+      updateStatusBadge();
+    });
+
+    // Manual activate (admin) - choose a key and activate immediately for given email (pre-activated)
+    manualActivateBtn.addEventListener('click', ()=>{
+      const email = (newKeyEmail.value || '').trim();
+      if(!email){ alert('Enter email to pre-activate or choose an existing key record'); return; }
+      // try to find an unactivated key for that email
+      const arr = readKeys();
+      let rec = arr.find(k => (k.email||'').toLowerCase() === email.toLowerCase() && !k.activatedAt);
+      if(!rec){
+        // if none, create one with default duration and activate it
+        const key = generateSRKey();
+        const now = new Date();
+        const durationDays = Number(newKeyDuration.value || 30);
+        rec = { key, email, durationDays, createdAt: now.toISOString(), activatedAt: now.toISOString(), expiresAt: new Date(now.getTime()+durationDays*24*3600*1000).toISOString() };
+        arr.push(rec);
+      } else {
+        const now = new Date();
+        rec.activatedAt = now.toISOString();
+        rec.expiresAt = new Date(now.getTime() + rec.durationDays*24*3600*1000).toISOString();
+      }
+      writeKeys(arr);
+      newKeyEmail.value = '';
+      renderAdminKeys();
+      updateStatusBadge();
+      alert(`Activated license for ${rec.email}\nKey: ${rec.key}`);
+    });
+
+    // Activation modal logic
+    function showProModal(){ proModalBackdrop.classList.add('show'); proModalBackdrop.setAttribute('aria-hidden','false'); activationMsg.textContent=''; licenseEmail.value=''; licenseKeyInput.value=''; licenseEmail.focus(); }
+    function hideProModal(){ proModalBackdrop.classList.remove('show'); proModalBackdrop.setAttribute('aria-hidden','true'); activationMsg.textContent=''; }
+
+    document.getElementById('activateBtnUI').addEventListener('click', showProModal);
+    modalCloseBtn.addEventListener('click', hideProModal);
+
+    function findKeyForEmailAndKey(email,key){
+      const arr = readKeys();
+      return arr.find(r => r.key === key && (r.email||'').toLowerCase() === (email||'').toLowerCase()) || null;
+    }
+
+    async function activateKeyForUser(email,key){
+      activationMsg.style.color = '#fff';
+      activationMsg.textContent = 'Validating...';
+      await new Promise(r=>setTimeout(r,400));
+      const rec = findKeyForEmailAndKey(email,key);
+      if(!rec){ activationMsg.style.color='#fca5a5'; activationMsg.textContent='Key not found for that email.'; return false; }
+      if(rec.activatedAt && rec.expiresAt && isActivationValid(rec)){
+        localStorage.setItem(LS_ACTIVE, JSON.stringify(rec));
+        activationMsg.style.color = '#86efac';
+        activationMsg.textContent = 'Already activated — Pro enabled.';
+        updateStatusBadge();
+        setTimeout(hideProModal,700);
+        return true;
+      }
+      // activate now
+      const now = new Date();
+      const expires = new Date(now.getTime() + rec.durationDays*24*3600*1000);
+      const updated = readKeys().map(k => k.key === rec.key && k.createdAt === rec.createdAt ? Object.assign({},k,{activatedAt:now.toISOString(),expiresAt:expires.toISOString()}) : k);
+      writeKeys(updated);
+      const newRec = updated.find(k => k.key === rec.key && k.createdAt === rec.createdAt);
+      localStorage.setItem(LS_ACTIVE, JSON.stringify(newRec));
+      activationMsg.style.color = '#86efac';
+      activationMsg.textContent = 'Activated — Pro unlocked.';
+      updateStatusBadge();
+      setTimeout(hideProModal,700);
+      return true;
+    }
+
+    modalActivateBtn.addEventListener('click', async ()=>{
+      const email = (licenseEmail.value||'').trim();
+      const key = (licenseKeyInput.value||'').trim();
+      if(!email || !key){ activationMsg.style.color='#fca5a5'; activationMsg.textContent='Enter email and key.'; return; }
+      await activateKeyForUser(email,key);
+    });
+
+    // Admin triple click detection -> open PIN modal
+    let clickCount = 0, clickTimer = null;
+    appTitle.addEventListener('click', ()=> {
+      clickCount++;
+      if(clickTimer) clearTimeout(clickTimer);
+      clickTimer = setTimeout(()=> clickCount = 0, 700);
+      if(clickCount >= 3){
+        clickCount = 0;
+        adminPinBackdrop.classList.add('show');
+        adminPinBackdrop.setAttribute('aria-hidden','false');
+        adminPinInput.value = '';
+        adminPinInput.focus();
+        adminPinMsg.textContent = '';
+      }
+    });
+
+    function openAdminFullscreen(){
+      adminFullscreen.classList.add('show');
+      adminFullscreen.setAttribute('aria-hidden','false');
+      renderAdminKeys();
+    }
+    function closeAdminFullscreen(){
+      adminFullscreen.classList.remove('show');
+      adminFullscreen.setAttribute('aria-hidden','true');
+    }
+
+    adminPinClose.addEventListener('click', ()=> { adminPinBackdrop.classList.remove('show'); adminPinBackdrop.setAttribute('aria-hidden','true'); });
+    closeAdminBtn.addEventListener('click', closeAdminFullscreen);
+
+    adminPinSubmit.addEventListener('click', ()=> {
+      const pin = (adminPinInput.value||'').trim();
+      if(pin === ADMIN_PIN){
+        adminPinMsg.style.color = '#86efac';
+        adminPinMsg.textContent = 'Unlocked';
+        setTimeout(()=> {
+          adminPinBackdrop.classList.remove('show');
+          adminPinBackdrop.setAttribute('aria-hidden','true');
+          openAdminFullscreen();
+        }, 400);
+      } else {
+        adminPinMsg.style.color = '#fca5a5';
+        adminPinMsg.textContent = 'Incorrect PIN';
+      }
+    });
+
+    // purge expired keys occasionally (remove fully expired records if you want; here we keep records but not activated ones)
+    (function purgeExpiredOnLoad(){
+      const arr = readKeys();
+      // keep all keys but if you want to remove fully expired activated records uncomment filter below
+      // const filtered = arr.filter(r => !r.expiresAt || isActivationValid(r) );
+      // writeKeys(filtered);
+      // we will leave records intact so admin can see history
+    })();
+
+    // PDF generation - keep professional layout
+    async function generatePdf(data){
+      const { jsPDF } = window.jspdf;
+      const doc = new jsPDF({unit:'pt', format:'a4'});
+      const pageWidth = doc.internal.pageSize.getWidth();
+
+      // Header: logo (centered top) and business name
+      const headerY = 36;
+      if(logoDataURL){
+        const logoW = 100;
+        const logoH = 100;
+        const logoX = (pageWidth - logoW) / 2;
+        try{ doc.addImage(logoDataURL, 'PNG', logoX, headerY, logoW, logoH); }
+        catch(e){ try{ doc.addImage(logoDataURL, 'JPEG', logoX, headerY, logoW, logoH); } catch(err){} }
+      }
+
+      const nameY = logoDataURL ? headerY + 120 : headerY + 10;
+      doc.setFont("helvetica","bold"); doc.setFontSize(18);
+      doc.text(data.businessName || 'Business Name', pageWidth/2, nameY, {align:'center'});
+      doc.setFont("helvetica","normal"); doc.setFontSize(11);
+      const contactLine = `${data.businessContact || ''}${data.businessContact && data.businessEmail ? ' | ' : ''}${data.businessEmail || ''}`;
+      doc.text(contactLine.trim(), pageWidth/2, nameY + 16, {align:'center'});
+
+      // Title
+      doc.setFont("helvetica","bold"); doc.setFontSize(12);
+      doc.text('OFFICIAL RECEIPT', pageWidth/2, nameY + 36, {align:'center'});
+      doc.setLineWidth(0.8); doc.line(48, nameY + 44, pageWidth - 48, nameY + 44);
+
+      // Body
+      let cursorY = nameY + 70; doc.setFont("helvetica","normal"); doc.setFontSize(11);
+      const boxX = 48, boxW = pageWidth - 96, boxY = cursorY, boxH = 170;
+      doc.setDrawColor(200); doc.setLineWidth(0.6); doc.roundedRect(boxX, boxY, boxW, boxH, 6, 6, 'S');
+
+      let rowY = boxY + 24;
+      doc.setFont("helvetica","bold"); doc.text('Payer Name:', boxX+18, rowY); doc.text(data.payerName || '-', boxX + boxW - 18, rowY, {align:'right'}); rowY += 22;
+      doc.text('Total Amount:', boxX+18, rowY); doc.text(`GHS ${data.totalAmount.toFixed(2)}`, boxX + boxW - 18, rowY, {align:'right'}); rowY += 22;
+      doc.text('Amount Paid:', boxX+18, rowY); doc.text(`GHS ${data.amountPaid.toFixed(2)}`, boxX + boxW - 18, rowY, {align:'right'}); rowY += 22;
+      doc.text('Arrears:', boxX+18, rowY); doc.text(`GHS ${data.arrears.toFixed(2)}`, boxX + boxW - 18, rowY, {align:'right'}); rowY += 22;
+      doc.text('Date:', boxX+18, rowY); doc.text(data.date, boxX + boxW - 18, rowY, {align:'right'}); rowY += 22;
+      doc.setFont("helvetica","normal"); doc.text('Purpose:', boxX+18, rowY);
+      const purposeLines = doc.splitTextToSize(data.purpose || '-', boxW - 36);
+      doc.text(purposeLines, boxX+18, rowY + 16);
+      cursorY = boxY + boxH + 12;
+
+      // Amount in words (simple)
+      try {
+        doc.setFontSize(10);
+        doc.text('Amount (in words): ' + amountInWords(data.amountPaid), boxX+18, cursorY);
+      } catch(e) {}
+      cursorY += 28;
+
+      // Signature
+      if(signatureDataURL){
+        const sigW = 140, sigH = 60;
+        const sigX = pageWidth - 48 - sigW, sigY = cursorY;
+        doc.setFont("helvetica","normal"); doc.text('Authorized Signature:', sigX - 10, sigY - 6, {align:'right'});
+        try{ doc.addImage(signatureDataURL, 'PNG', sigX, sigY, sigW, sigH); }
+        catch(e){ try{ doc.addImage(signatureDataURL, 'JPEG', sigX, sigY, sigW, sigH); }catch(err){} }
+        cursorY += sigH + 16;
+      }
+
+      // Footer
+      doc.setLineWidth(0.6); doc.line(48, cursorY, pageWidth - 48, cursorY);
+      cursorY += 14; doc.setFont("helvetica","italic"); doc.setFontSize(10);
+      doc.text('Thank you for your business!', pageWidth / 2, cursorY, {align:'center'});
+      cursorY += 12; doc.text('Powered by SmartReceipt', pageWidth / 2, cursorY, {align:'center'});
+
+      return doc.output('blob');
+    }
+
+    // Basic amount->words (for english Ghana Cedis)
+    function amountInWords(n){
+      const small = ['Zero','One','Two','Three','Four','Five','Six','Seven','Eight','Nine','Ten','Eleven','Twelve','Thirteen','Fourteen','Fifteen','Sixteen','Seventeen','Eighteen','Nineteen'];
+      const tens = ['','','Twenty','Thirty','Forty','Fifty','Sixty','Seventy','Eighty','Ninety'];
+      function inWords(num){
+        num = Math.floor(Math.abs(num));
+        if(num < 20) return small[num];
+        if(num < 100) return tens[Math.floor(num/10)] + (num % 10 ? '-' + small[num % 10] : '');
+        if(num < 1000) return small[Math.floor(num/100)] + ' Hundred' + (num % 100 ? ' and ' + inWords(num % 100) : '');
+        if(num < 1000000) return inWords(Math.floor(num/1000)) + ' Thousand' + (num % 1000 ? ' ' + inWords(num % 1000) : '');
+        return num.toString();
+      }
+      return inWords(Math.floor(n)) + ' Ghana Cedis';
+    }
+
+    // Generate event
+    generateBtn.addEventListener('click', async ()=>{
+      const data = {
+        businessName: businessNameEl.value.trim(),
+        businessContact: businessContactEl.value.trim(),
+        businessEmail: businessEmailEl.value.trim(),
+        payerName: payerNameEl.value.trim(),
+        totalAmount: Number(totalAmountEl.value) || 0,
+        amountPaid: Number(amountPaidEl.value) || 0,
+        arrears: Number(arrearsEl.value) || 0,
+        date: dateEl.value || new Date().toISOString().slice(0,10),
+        purpose: purposeEl.value.trim()
+      };
+      if(!data.businessName || !data.payerName){ return alert('Please fill Business Name and Payer Name.'); }
+      preview.textContent = 'Generating PDF...';
+      try{
+        const blob = await generatePdf(data);
+        if(window._lastPdf) URL.revokeObjectURL(window._lastPdf);
+        window._lastPdf = URL.createObjectURL(blob);
+        downloadBtn.disabled = false;
+        downloadBtn.onclick = ()=> {
+          const a = document.createElement('a'); a.href = window._lastPdf; a.download = `receipt_${Date.now()}.pdf`; a.click();
+        };
+        preview.innerHTML = `✅ PDF ready — <a href="${window._lastPdf}" target="_blank">Open PDF</a> — click Download to save.`;
+        alert('Receipt generated.');
+      }catch(err){
+        console.error(err);
+        preview.textContent = 'Error generating PDF. Check console.';
+      }
+    });
+
+    // WhatsApp share (text only)
+    whatsappBtn.addEventListener('click', ()=>{
+      const d = { business: businessNameEl.value, payer: payerNameEl.value, total: Number(totalAmountEl.value)||0, paid: Number(amountPaidEl.value)||0, arrears: Number(arrearsEl.value)||0, date: dateEl.value||'' };
+      const text = `Receipt from ${d.business}\nPayer: ${d.payer}\nTotal: GHS ${d.total.toFixed(2)}\nPaid: GHS ${d.paid.toFixed(2)}\nArrears: GHS ${d.arrears.toFixed(2)}\nDate: ${d.date}`;
+      window.open('https://wa.me/?text='+encodeURIComponent(text),'_blank');
+    });
+
+    // Copy summary
+    copyBtn.addEventListener('click', async ()=>{
+      const txt = `Receipt — ${businessNameEl.value} | ${payerNameEl.value} | Total: GHS ${Number(totalAmountEl.value||0).toFixed(2)} | Paid: GHS ${Number(amountPaidEl.value||0).toFixed(2)} | Arrears: GHS ${Number(arrearsEl.value||0).toFixed(2)} | Date: ${dateEl.value} | Purpose: ${purposeEl.value}`;
+      try{
+        await navigator.clipboard.writeText(txt);
+        alert('Summary copied to clipboard');
+      }catch(e){
+        alert('Copy failed — please select and copy manually:\n' + txt);
+      }
+    });
+
+    // initial render + sample dummy data (as requested)
+    (function seedDummyData(){
+      const existing = readKeys();
+      if(existing.length === 0){
+        const now = new Date();
+        const sample1 = { key: generateSRKey(), email: 'alice@example.com', durationDays:30, createdAt: now.toISOString(), activatedAt: now.toISOString(), expiresAt: new Date(now.getTime()+30*24*3600*1000).toISOString() };
+        const sample2 = { key: generateSRKey(), email: 'bob@example.com', durationDays:15, createdAt: now.toISOString(), activatedAt: null, expiresAt: null };
+        writeKeys([sample1,sample2]);
+      }
+      renderAdminKeys();
+      updateStatusBadge();
+    })();
+
+    // restore active license at load
+    (function restoreActive(){
+      const active = JSON.parse(localStorage.getItem(LS_ACTIVE) || 'null');
+      if(active && isActivationValid(active)){
+        // ensure latest data from stored keys
+        const rec = readKeys().find(k => k.key === active.key && (k.email||'').toLowerCase() === (active.email||'').toLowerCase());
+        if(rec) localStorage.setItem(LS_ACTIVE, JSON.stringify(rec));
+      } else {
+        localStorage.removeItem(LS_ACTIVE);
+      }
+      updateStatusBadge();
+    })();
+
+    // expose for debugging
+    window.SmartReceipt = { readKeys, writeKeys, renderAdminKeys, getCurrentActivation };
+
+  })();
+  </script>
+</body>
+</html>
