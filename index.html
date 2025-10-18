@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width,initial-scale=1" />
-  <title>SmartReceipt — Advanced Premium Edition</title>
+  <title>SmartReceipt Pro</title>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
 
   <style>
@@ -19,8 +19,7 @@
       --admin-bg: #0b1220; /* solid admin background */
     }
 
-    /* Make page always scrollable (no internal locked scroll),
-       keep container vertically centered but avoid header jumping on mobile keyboard. */
+    /* Make page always scrollable, avoid header jumping on mobile keyboard */
     html,body{height:100%}
     body{
       margin:0;
@@ -30,7 +29,7 @@
       background: linear-gradient(135deg,var(--grad1),var(--grad2),var(--grad3));
       background-size: 400% 400%;
       animation: gradientShift 10s ease infinite;
-      display:block; /* allow normal document flow */
+      display:block;
       min-height:100vh;
       padding:28px; /* give space for keyboard on mobile */
       box-sizing:border-box;
@@ -45,7 +44,7 @@
     .page-wrap{
       display:flex;
       justify-content:center;
-      align-items:flex-start; /* allow container to stay visible and not jump when keyboard opens */
+      align-items:flex-start; /* prevents container from jumping up when keyboard opens */
       width:100%;
       margin:0 auto;
     }
@@ -64,27 +63,31 @@
       color: #fff;
       box-sizing:border-box;
       margin-bottom: 32px;
+      position: relative;
     }
 
     /* ===== header area: status badge + title (fixed layout to prevent overlap) ===== */
     .header-row{
-      display:flex;
-      align-items:center;
-      justify-content:center;
-      gap:12px;
+      display:block;
       position:relative;
+      padding: 6px 0 12px 0;
     }
+
+    /* status badge is anchored left */
     .status-badge {
       position: absolute;
       left: 16px;
-      top: 12px;
+      top: 6px;
       background: rgba(255,255,255,0.06);
       padding: 8px 12px;
       border-radius: 12px;
       font-weight: 700;
       font-size: 0.88rem;
       white-space:nowrap;
+      z-index: 2;
     }
+
+    /* title is centered using absolute centering (left:50% + transform) so badge doesn't push it */
     h1{
       margin:0 0 8px 0;
       font-size:1.6rem;
@@ -93,6 +96,20 @@
       letter-spacing:0.2px;
       cursor: pointer;
       user-select: none;
+      position: absolute;
+      left: 50%;
+      transform: translateX(-50%);
+      top: 8px;
+      z-index: 1;
+      padding: 4px 8px;
+      background: transparent;
+    }
+
+    /* when title text is long wrap gracefully on small screens */
+    @media (max-width:420px){
+      h1{ font-size:1.25rem; position: static; transform:none; text-align:center; margin-top:6px; }
+      .status-badge{ position: static; margin-bottom:8px; }
+      .header-row{ display:flex; flex-direction:column; align-items:center; gap:6px; }
     }
 
     /* ===== form layout ===== */
@@ -190,11 +207,10 @@
     .theme-btn.active{ box-shadow: 0 6px 20px rgba(0,0,0,0.25); transform:translateY(-2px); }
 
     /* responsive */
-    @media (max-width:920px){
+    @media (max-width:720px){
       .row{flex-direction:column}
       .actions{flex-direction:column}
       button{width:100%}
-      .status-badge{ left: 12px; top: 10px; }
     }
 
     /* ===== modal backdrop ===== */
@@ -244,16 +260,16 @@
     .admin-fullscreen.show { display:block; }
 
     .admin-header { display:flex; align-items:center; justify-content:space-between; gap:12px; margin-bottom:12px; }
-    .admin-title { font-size:1.4rem; font-weight:700; }
+    .admin-title { font-size:1.4rem; font-weight:700; color:#fff; }
     .admin-actions { display:flex; gap:8px; align-items:center; }
 
     .admin-panel-box { background: #071026; padding:12px; border-radius:8px; border:1px solid rgba(255,255,255,0.04); }
 
-    table.admin-table { width:100%; border-collapse:collapse; margin-top:12px; font-size:0.95rem; }
+    table.admin-table { width:100%; border-collapse:collapse; margin-top:12px; font-size:0.95rem; color:#fff; }
     table.admin-table th, table.admin-table td { border:1px solid rgba(255,255,255,0.06); padding:8px; text-align:left; vertical-align:middle; }
-    table.admin-table th { background: rgba(255,255,255,0.03); font-weight:700; }
+    table.admin-table th { background: rgba(255,255,255,0.03); font-weight:700; color:#fff; }
 
-    .pill { padding:6px 10px; border-radius:999px; background: rgba(255,255,255,0.04); font-weight:700; display:inline-block; }
+    .pill { padding:6px 10px; border-radius:999px; background: rgba(255,255,255,0.04); font-weight:700; display:inline-block; color:#fff; }
 
     /* small screens admin layout */
     @media (max-width:720px){
@@ -266,16 +282,21 @@
   <div class="page-wrap">
     <div class="container" role="region" aria-label="SmartReceipt Form">
       <div class="header-row">
-        <div id="statusBadge" class="status-badge" aria-live="polite">Pro: Not activated</div>
-        <h1 id="appTitle">SmartReceipt — Advanced Premium</h1>
+        <h1 id="appTitle">SmartReceipt Pro</h1>
       </div>
+            <div id="statusBadge" class="status-badge" aria-live="polite">🔒 Pro: Not activated</div>
+        <br>
+        <br>
 
       <!-- Theme switcher -->
+       <br>
       <div class="theme-switcher" aria-hidden="false">
+        
         <button class="theme-btn active" data-theme="blue" id="themeBlue">Blue</button>
         <button class="theme-btn" data-theme="green" id="themeGreen">Green</button>
         <button class="theme-btn" data-theme="gold" id="themeGold">Gold</button>
       </div>
+      
 
       <form id="receiptForm" autocomplete="off" onsubmit="return false;">
         <!-- Business details -->
@@ -399,7 +420,7 @@
     <div class="admin-header">
       <div>
         <div class="admin-title">Admin — License Manager</div>
-        <div class="muted" style="margin-top:6px">Solid admin interface — manage keys & activations</div>
+        <div class="muted" style="margin-top:6px;color:rgba(255,255,255,0.85)">Manage keys & activations</div>
       </div>
       <div class="admin-actions">
         <button id="closeAdminBtn" style="background:#ef4444;color:#fff;border:none;padding:8px 12px;border-radius:8px;font-weight:700">Close</button>
@@ -453,7 +474,6 @@
 
     // Admin pin & fullscreen
     const adminPinBackdrop = document.getElementById('adminPinBackdrop');
-    const adminPinStage = document.getElementById('adminPinBackdrop');
     const adminPinInput = document.getElementById('adminPinInput');
     const adminPinSubmit = document.getElementById('adminPinSubmit');
     const adminPinClose = document.getElementById('adminPinClose');
@@ -490,9 +510,44 @@
 
     // State & storage keys
     const LS_KEYS = "sr_generatedKeys"; // array of { key, email, durationDays, createdAt, activatedAt, expiresAt }
-    const LS_CURRENT_ACT = "sr_currentActivation";
     const LS_ACTIVE = "sr_activeLicense";
     const ADMIN_PIN = localStorage.getItem('sr_adminPin') || "2468";
+
+    // In-memory cache of license keys (kept in sync with localStorage)
+    let generatedKeys = [];
+
+    function loadKeysToMemory(){
+      try{
+        const raw = localStorage.getItem(LS_KEYS);
+        generatedKeys = raw ? JSON.parse(raw) : [];
+      }catch(e){
+        generatedKeys = [];
+      }
+    }
+    function syncKeysToStorage(){
+      try{
+        localStorage.setItem(LS_KEYS, JSON.stringify(generatedKeys));
+      }catch(e){}
+      // notify other tabs if needed (storage event fires automatically)
+    }
+
+    // read/write helpers (now backed by in-memory array)
+    function readKeys(){ return generatedKeys.slice(); } // return copy
+    function writeKeys(arr){
+      generatedKeys = arr.slice();
+      syncKeysToStorage();
+      renderAdminKeys(); // auto-refresh table whenever storage changes
+      updateStatusBadge();
+    }
+
+    // Watch for external localStorage changes (other tabs) and update memory + UI
+    window.addEventListener('storage', (e)=>{
+      if(e.key === LS_KEYS){
+        loadKeysToMemory();
+        renderAdminKeys();
+        updateStatusBadge();
+      }
+    });
 
     // Default date to today
     dateEl.value = new Date().toISOString().slice(0,10);
@@ -566,22 +621,13 @@
     totalAmountEl.addEventListener('input', updateArrears);
     amountPaidEl.addEventListener('input', updateArrears);
 
-    // Storage helpers
-    function readKeys() {
-      try {
-        const raw = localStorage.getItem(LS_KEYS);
-        return raw ? JSON.parse(raw) : [];
-      } catch(e) { return []; }
-    }
-    function writeKeys(arr) { localStorage.setItem(LS_KEYS, JSON.stringify(arr)); }
-
     // Generate SR-XXXX-XXXX-XXXX
     function generateSRKey() {
       const chunk = () => Math.random().toString(36).substr(2,5).toUpperCase().replace(/[^A-Z0-9]/g,'A').padEnd(5,'A');
       return `SR-${chunk()}-${chunk()}-${chunk()}`;
     }
 
-    // Admin list rendering
+    // Admin list rendering - dynamic
     function renderAdminKeys(){
       const arr = readKeys();
       adminKeysList.innerHTML = '';
@@ -589,17 +635,18 @@
         adminKeysList.innerHTML = '<tr><td colspan="6" style="color:rgba(255,255,255,0.6);padding:12px">No keys yet</td></tr>';
         return;
       }
+      // show newest first
       arr.slice().reverse().forEach(rec => {
         const tr = document.createElement('tr');
         const activated = rec.activatedAt ? (new Date(rec.activatedAt)).toLocaleString() : '-';
         const expires = rec.expiresAt ? (new Date(rec.expiresAt)).toLocaleString() : '-';
         tr.innerHTML = `
-          <td style="padding:8px">${rec.email || '(no email)'}</td>
-          <td style="padding:8px">${rec.key}</td>
+          <td style="padding:8px;max-width:180px;word-break:break-word">${escapeHtml(rec.email || '(no email)')}</td>
+          <td style="padding:8px;max-width:220px;word-break:break-all">${escapeHtml(rec.key)}</td>
           <td style="padding:8px">${rec.durationDays}d</td>
-          <td style="padding:8px">${activated}</td>
-          <td style="padding:8px">${expires}</td>
-          <td style="padding:8px">
+          <td style="padding:8px">${escapeHtml(activated)}</td>
+          <td style="padding:8px">${escapeHtml(expires)}</td>
+          <td style="padding:8px;white-space:nowrap">
             <button data-key="${rec.key}" class="copyKey" style="margin-right:6px">Copy</button>
             <button data-key="${rec.key}" class="deleteKey" style="background:#ef4444;color:#fff;border:none;padding:6px 8px;border-radius:6px">Delete</button>
           </td>
@@ -609,13 +656,13 @@
 
       // attach handlers
       document.querySelectorAll('.copyKey').forEach(btn => {
-        btn.addEventListener('click', () => {
+        btn.onclick = () => {
           const key = btn.getAttribute('data-key');
-          navigator.clipboard.writeText(key).then(()=> alert('Key copied to clipboard'));
-        });
+          navigator.clipboard.writeText(key).then(()=> alert('Key copied to clipboard')).catch(()=> alert('Copy failed'));
+        };
       });
       document.querySelectorAll('.deleteKey').forEach(btn => {
-        btn.addEventListener('click', ()=> {
+        btn.onclick = ()=> {
           if(!confirm('Delete this key?')) return;
           const key = btn.getAttribute('data-key');
           const survivors = readKeys().filter(k => k.key !== key);
@@ -625,7 +672,7 @@
           if(active && active.key === key) localStorage.removeItem(LS_ACTIVE);
           renderAdminKeys();
           updateStatusBadge();
-        });
+        };
       });
     }
 
@@ -655,7 +702,7 @@
       }
     }
 
-    // Admin: generate key
+    // Generate key (admin)
     generateKeyBtn.addEventListener('click', ()=>{
       const email = (newKeyEmail.value || '').trim();
       const durationDays = Number(newKeyDuration.value || 30);
@@ -666,20 +713,19 @@
       const rec = { key, email, durationDays, createdAt: now.toISOString(), activatedAt: null, expiresAt: null };
       const arr = readKeys(); arr.push(rec); writeKeys(arr);
       newKeyEmail.value = '';
-      renderAdminKeys();
+      renderAdminKeys(); // dynamic update
       alert(`Key created for ${rec.email}\nKey: ${rec.key}`);
       updateStatusBadge();
     });
 
-    // Manual activate (admin) - choose a key and activate immediately for given email (pre-activated)
+    // Manual activate (admin) - pre-activated license for specific email
     manualActivateBtn.addEventListener('click', ()=>{
       const email = (newKeyEmail.value || '').trim();
-      if(!email){ alert('Enter email to pre-activate or choose an existing key record'); return; }
-      // try to find an unactivated key for that email
+      if(!email){ alert('Enter email to pre-activate or choose an existing key'); return; }
       const arr = readKeys();
       let rec = arr.find(k => (k.email||'').toLowerCase() === email.toLowerCase() && !k.activatedAt);
       if(!rec){
-        // if none, create one with default duration and activate it
+        // create & activate
         const key = generateSRKey();
         const now = new Date();
         const durationDays = Number(newKeyDuration.value || 30);
@@ -782,23 +828,42 @@
           adminPinBackdrop.classList.remove('show');
           adminPinBackdrop.setAttribute('aria-hidden','true');
           openAdminFullscreen();
-        }, 400);
+        }, 350);
       } else {
         adminPinMsg.style.color = '#fca5a5';
         adminPinMsg.textContent = 'Incorrect PIN';
       }
     });
 
-    // purge expired keys occasionally (remove fully expired records if you want; here we keep records but not activated ones)
-    (function purgeExpiredOnLoad(){
-      const arr = readKeys();
-      // keep all keys but if you want to remove fully expired activated records uncomment filter below
-      // const filtered = arr.filter(r => !r.expiresAt || isActivationValid(r) );
-      // writeKeys(filtered);
-      // we will leave records intact so admin can see history
+    // seed sample data on first run (dummy test keys)
+    (function seedDummyData(){
+      loadKeysToMemory();
+      if(generatedKeys.length === 0){
+        const now = new Date();
+        const sample1 = { key: 'SR-1234-5678-9012', email: 'demo@example.com', durationDays:30, createdAt: now.toISOString(), activatedAt: now.toISOString(), expiresAt: new Date(now.getTime()+30*24*3600*1000).toISOString() };
+        const sample2 = { key: 'SR-8888-9999-0000', email: 'test@sample.com', durationDays:15, createdAt: now.toISOString(), activatedAt: null, expiresAt: null };
+        generatedKeys = [sample1,sample2];
+        syncKeysToStorage();
+      }
+      renderAdminKeys();
+      updateStatusBadge();
     })();
 
-    // PDF generation - keep professional layout
+    // restore active license at load (synchronize with current stored keys)
+    (function restoreActive(){
+      loadKeysToMemory();
+      const active = JSON.parse(localStorage.getItem(LS_ACTIVE) || 'null');
+      if(active && isActivationValid(active)){
+        const rec = readKeys().find(k => k.key === active.key && (k.email||'').toLowerCase() === (active.email||'').toLowerCase());
+        if(rec) localStorage.setItem(LS_ACTIVE, JSON.stringify(rec));
+      } else {
+        localStorage.removeItem(LS_ACTIVE);
+      }
+      renderAdminKeys();
+      updateStatusBadge();
+    })();
+
+    // PDF generation - professional layout (kept intact)
     async function generatePdf(data){
       const { jsPDF } = window.jspdf;
       const doc = new jsPDF({unit:'pt', format:'a4'});
@@ -872,14 +937,7 @@
     function amountInWords(n){
       const small = ['Zero','One','Two','Three','Four','Five','Six','Seven','Eight','Nine','Ten','Eleven','Twelve','Thirteen','Fourteen','Fifteen','Sixteen','Seventeen','Eighteen','Nineteen'];
       const tens = ['','','Twenty','Thirty','Forty','Fifty','Sixty','Seventy','Eighty','Ninety'];
-      function inWords(num){
-        num = Math.floor(Math.abs(num));
-        if(num < 20) return small[num];
-        if(num < 100) return tens[Math.floor(num/10)] + (num % 10 ? '-' + small[num % 10] : '');
-        if(num < 1000) return small[Math.floor(num/100)] + ' Hundred' + (num % 100 ? ' and ' + inWords(num % 100) : '');
-        if(num < 1000000) return inWords(Math.floor(num/1000)) + ' Thousand' + (num % 1000 ? ' ' + inWords(num % 1000) : '');
-        return num.toString();
-      }
+      function inWords(num){ num = Math.floor(Math.abs(num)); if(num < 20) return small[num]; if(num < 100) return tens[Math.floor(num/10)] + (num % 10 ? '-' + small[num % 10] : ''); if(num < 1000) return small[Math.floor(num/100)] + ' Hundred' + (num % 100 ? ' and ' + inWords(num % 100) : ''); if(num < 1000000) return inWords(Math.floor(num/1000)) + ' Thousand' + (num % 1000 ? ' ' + inWords(num % 1000) : ''); return num.toString(); }
       return inWords(Math.floor(n)) + ' Ghana Cedis';
     }
 
@@ -932,34 +990,21 @@
       }
     });
 
-    // initial render + sample dummy data (as requested)
-    (function seedDummyData(){
-      const existing = readKeys();
-      if(existing.length === 0){
-        const now = new Date();
-        const sample1 = { key: generateSRKey(), email: 'alice@example.com', durationDays:30, createdAt: now.toISOString(), activatedAt: now.toISOString(), expiresAt: new Date(now.getTime()+30*24*3600*1000).toISOString() };
-        const sample2 = { key: generateSRKey(), email: 'bob@example.com', durationDays:15, createdAt: now.toISOString(), activatedAt: null, expiresAt: null };
-        writeKeys([sample1,sample2]);
-      }
-      renderAdminKeys();
-      updateStatusBadge();
-    })();
+    // small helper to escape HTML in table cells
+    function escapeHtml(s){
+      if(!s && s !== 0) return '';
+      return String(s).replace(/[&<>"']/g, function(m){ return ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[m]); });
+    }
 
-    // restore active license at load
-    (function restoreActive(){
-      const active = JSON.parse(localStorage.getItem(LS_ACTIVE) || 'null');
-      if(active && isActivationValid(active)){
-        // ensure latest data from stored keys
-        const rec = readKeys().find(k => k.key === active.key && (k.email||'').toLowerCase() === (active.email||'').toLowerCase());
-        if(rec) localStorage.setItem(LS_ACTIVE, JSON.stringify(rec));
-      } else {
-        localStorage.removeItem(LS_ACTIVE);
-      }
-      updateStatusBadge();
-    })();
-
-    // expose for debugging
-    window.SmartReceipt = { readKeys, writeKeys, renderAdminKeys, getCurrentActivation };
+    // expose some handy debug methods
+    window.SmartReceipt = {
+      loadKeysToMemory,
+      syncKeysToStorage,
+      readKeys,
+      writeKeys,
+      renderAdminKeys,
+      getCurrentActivation
+    };
 
   })();
   </script>
