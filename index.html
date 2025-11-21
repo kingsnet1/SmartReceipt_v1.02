@@ -403,17 +403,25 @@
     </div>
   </div>
 
-  <!-- Admin PIN modal (small) -->
-  <div id="adminPinBackdrop" class="modal-backdrop" aria-hidden="true">
-    <div class="modal" role="dialog" aria-modal="true" aria-labelledby="adminPinTitle">
-      <h3 id="adminPinTitle">Admin — Enter PIN</h3>
-      <p class="muted">Enter PIN to unlock the admin panel.</p>
-      <input id="adminPinInput" type="password" placeholder="Enter PIN" style="margin-top:8px" />
+  <!-- Admin Login modal (email and password) -->
+  <div id="adminLoginBackdrop" class="modal-backdrop" aria-hidden="true">
+    <div class="modal" role="dialog" aria-modal="true" aria-labelledby="adminLoginTitle">
+      <h3 id="adminLoginTitle">Admin Login</h3>
+      <p class="muted">Enter admin email and password to access the admin panel.</p>
+      
+      <label>Email
+        <input id="adminEmailInput" type="email" placeholder="Enter admin email" />
+      </label>
+      
+      <label>Password
+        <input id="adminPasswordInput" type="password" placeholder="Enter admin password" />
+      </label>
+      
       <div style="display:flex;gap:8px;justify-content:center;margin-top:12px;">
-        <button id="adminPinSubmit" style="background:#2563eb;color:#fff">Unlock</button>
-        <button id="adminPinClose" style="background: rgba(255,255,255,0.08); color:#fff">Close</button>
+        <button id="adminLoginSubmit" style="background:#2563eb;color:#fff">Login</button>
+        <button id="adminLoginClose" style="background: rgba(255,255,255,0.08); color:#fff">Close</button>
       </div>
-      <p id="adminPinMsg" style="text-align:center;margin-top:8px;color:#fca5a5;font-weight:700"></p>
+      <p id="adminLoginMsg" style="text-align:center;margin-top:8px;color:#fca5a5;font-weight:700"></p>
     </div>
   </div>
 
@@ -463,12 +471,12 @@
   (function(){
     // Firebase Configuration - REPLACE WITH YOUR CONFIG
     const firebaseConfig = {
-         apiKey: "AIzaSyCdMifjpX4L5cdkPJZKEZAxgIppUYbS5qk",
-  authDomain: "smartreceipt-52dc9.firebaseapp.com",
-  projectId: "smartreceipt-52dc9",
-  storageBucket: "smartreceipt-52dc9.firebasestorage.app",
-  messagingSenderId: "345183601946",
-  appId: "1:345183601946:web:d7a24e83e4132345cd18a3"
+      apiKey: "AIzaSyCdMifjpX4L5cdkPJZKEZAxgIppUYbS5qk",
+      authDomain: "smartreceipt-52dc9.firebaseapp.com",
+      projectId: "smartreceipt-52dc9",
+      storageBucket: "smartreceipt-52dc9.firebasestorage.app",
+      messagingSenderId: "345183601946",
+      appId: "1:345183601946:web:d7a24e83e4132345cd18a3"
     };
 
     // Initialize Firebase
@@ -491,12 +499,13 @@
     const modalCloseBtn = document.getElementById('modalCloseBtn');
     const activationMsg = document.getElementById('activationMsg');
 
-    // Admin pin & fullscreen
-    const adminPinBackdrop = document.getElementById('adminPinBackdrop');
-    const adminPinInput = document.getElementById('adminPinInput');
-    const adminPinSubmit = document.getElementById('adminPinSubmit');
-    const adminPinClose = document.getElementById('adminPinClose');
-    const adminPinMsg = document.getElementById('adminPinMsg');
+    // Admin login modal (email and password)
+    const adminLoginBackdrop = document.getElementById('adminLoginBackdrop');
+    const adminEmailInput = document.getElementById('adminEmailInput');
+    const adminPasswordInput = document.getElementById('adminPasswordInput');
+    const adminLoginSubmit = document.getElementById('adminLoginSubmit');
+    const adminLoginClose = document.getElementById('adminLoginClose');
+    const adminLoginMsg = document.getElementById('adminLoginMsg');
 
     const adminFullscreen = document.getElementById('adminFullscreen');
     const adminKeysList = document.getElementById('adminKeysList');
@@ -532,7 +541,6 @@
     const LS_ACTIVE = "sr_activeLicense";
     const LS_RECEIPT_COUNT = "sr_receiptCount";
     const LS_USER_ID = "sr_userId";
-    const ADMIN_EMAIL = "admin@smartreceipt.com"; // Change this to your admin email
 
     // Track receipt usage
     let receiptCount = parseInt(localStorage.getItem(LS_RECEIPT_COUNT) || '0');
@@ -983,34 +991,33 @@
         await activateKeyForUser(email, key);
     });
 
-    // Admin authentication
+    // Admin authentication with email and password
     function showAdminLoginModal() {
-        adminPinBackdrop.classList.add('show');
-        adminPinBackdrop.setAttribute('aria-hidden','false');
-        adminPinInput.value = '';
-        adminPinInput.focus();
-        adminPinMsg.textContent = '';
-        document.getElementById('adminPinTitle').textContent = 'Admin Login';
-        adminPinInput.placeholder = 'Enter admin password';
+        adminLoginBackdrop.classList.add('show');
+        adminLoginBackdrop.setAttribute('aria-hidden','false');
+        adminEmailInput.value = '';
+        adminPasswordInput.value = '';
+        adminEmailInput.focus();
+        adminLoginMsg.textContent = '';
     }
 
-    async function handleAdminLogin(password) {
+    async function handleAdminLogin(email, password) {
         try {
             // Sign in with email and password
-            await auth.signInWithEmailAndPassword(ADMIN_EMAIL, password);
-            adminPinMsg.style.color = '#86efac';
-            adminPinMsg.textContent = 'Login successful!';
+            await auth.signInWithEmailAndPassword(email, password);
+            adminLoginMsg.style.color = '#86efac';
+            adminLoginMsg.textContent = 'Login successful!';
             
             setTimeout(() => {
-                adminPinBackdrop.classList.remove('show');
-                adminPinBackdrop.setAttribute('aria-hidden','true');
+                adminLoginBackdrop.classList.remove('show');
+                adminLoginBackdrop.setAttribute('aria-hidden','true');
                 openAdminFullscreen();
             }, 500);
             
         } catch (error) {
             console.error('Login error:', error);
-            adminPinMsg.style.color = '#fca5a5';
-            adminPinMsg.textContent = 'Login failed. Check email and password.';
+            adminLoginMsg.style.color = '#fca5a5';
+            adminLoginMsg.textContent = 'Login failed. Check email and password.';
         }
     }
 
@@ -1039,27 +1046,34 @@
         auth.signOut();
     }
 
-    adminPinClose.addEventListener('click', ()=> { 
-        adminPinBackdrop.classList.remove('show'); 
-        adminPinBackdrop.setAttribute('aria-hidden','true'); 
+    adminLoginClose.addEventListener('click', ()=> { 
+        adminLoginBackdrop.classList.remove('show'); 
+        adminLoginBackdrop.setAttribute('aria-hidden','true'); 
     });
     
     closeAdminBtn.addEventListener('click', closeAdminFullscreen);
 
-    adminPinSubmit.addEventListener('click', ()=> {
-        const password = (adminPinInput.value||'').trim();
-        if(!password) {
-            adminPinMsg.style.color = '#fca5a5';
-            adminPinMsg.textContent = 'Please enter password';
+    adminLoginSubmit.addEventListener('click', ()=> {
+        const email = (adminEmailInput.value||'').trim();
+        const password = (adminPasswordInput.value||'').trim();
+        if(!email || !password) {
+            adminLoginMsg.style.color = '#fca5a5';
+            adminLoginMsg.textContent = 'Please enter both email and password';
             return;
         }
-        handleAdminLogin(password);
+        handleAdminLogin(email, password);
     });
 
     // Also allow Enter key in admin login
-    adminPinInput.addEventListener('keypress', (e) => {
+    adminEmailInput.addEventListener('keypress', (e) => {
         if (e.key === 'Enter') {
-            adminPinSubmit.click();
+            adminPasswordInput.focus();
+        }
+    });
+    
+    adminPasswordInput.addEventListener('keypress', (e) => {
+        if (e.key === 'Enter') {
+            adminLoginSubmit.click();
         }
     });
 
@@ -1164,12 +1178,7 @@
         });
     }
 
-})();
+  })();
   </script>
 </body>
 </html>
-
-
-
-
-
