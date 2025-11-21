@@ -3,6 +3,9 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-auth-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-firestore-compat.js"></script>
   <title>SmartReceipt Pro</title>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
 
@@ -458,6 +461,21 @@
 
   <script>
   (function(){
+    // Firebase Configuration
+    const firebaseConfig = {
+        apiKey: "your-api-key",
+        authDomain: "your-project.firebaseapp.com",
+        projectId: "your-project-id",
+        storageBucket: "your-project.appspot.com",
+        messagingSenderId: "123456789",
+        appId: "your-app-id"
+    };
+
+    // Initialize Firebase
+    firebase.initializeApp(firebaseConfig);
+    const auth = firebase.auth();
+    const db = firebase.firestore();
+
     // Elements (main)
     const appTitle = document.getElementById('appTitle');
     const themeBtns = document.querySelectorAll('.theme-btn');
@@ -492,6 +510,7 @@
     const whatsappBtn = document.getElementById('whatsapp');
     const copyBtn = document.getElementById('copySummary');
     const preview = document.getElementById('preview');
+    const activateBtnUI = document.getElementById('activateBtnUI');
 
     const businessNameEl = document.getElementById('businessName');
     const businessContactEl = document.getElementById('businessContact');
@@ -508,101 +527,81 @@
     const signaturePreview = document.getElementById('signaturePreview');
 
     // State & storage keys
-    const LS_KEYS = "sr_generatedKeys"; // array of { key, email, durationDays, createdAt, activatedAt, expiresAt }
     const LS_ACTIVE = "sr_activeLicense";
-    const ADMIN_PIN = localStorage.getItem('sr_adminPin') || "2468";
+    const LS_RECEIPT_COUNT = "sr_receiptCount";
+    const LS_FIRST_USE = "sr_firstUse";
+    const ADMIN_EMAIL = "admin@smartreceipt.com"; // Change this to your admin email
 
-    // In-memory cache of license keys (kept in sync with localStorage)
-    let generatedKeys = [];
+    // Track receipt usage
+    let receiptCount = parseInt(localStorage.getItem(LS_RECEIPT_COUNT) || '0');
+    let isTrialActive = true;
+    let isProActive = false;
 
-    function loadKeysToMemory(){
-      try{
-        const raw = localStorage.getItem(LS_KEYS);
-        generatedKeys = raw ? JSON.parse(raw) : [];
-      }catch(e){
-        generatedKeys = [];
-      }
+    // Check if this is first use
+    if (!localStorage.getItem(LS_FIRST_USE)) {
+        localStorage.setItem(LS_FIRST_USE, 'true');
+        localStorage.setItem(LS_RECEIPT_COUNT, '0');
+        receiptCount = 0;
     }
-    function syncKeysToStorage(){
-      try{
-        localStorage.setItem(LS_KEYS, JSON.stringify(generatedKeys));
-      }catch(e){}
-      // notify other tabs if needed (storage event fires automatically)
-    }
-
-    // read/write helpers (now backed by in-memory array)
-    function readKeys(){ return generatedKeys.slice(); } // return copy
-    function writeKeys(arr){
-      generatedKeys = arr.slice();
-      syncKeysToStorage();
-      renderAdminKeys(); // auto-refresh table whenever storage changes
-      updateStatusBadge();
-    }
-
-    // Watch for external localStorage changes (other tabs) and update memory + UI
-    window.addEventListener('storage', (e)=>{
-      if(e.key === LS_KEYS){
-        loadKeysToMemory();
-        renderAdminKeys();
-        updateStatusBadge();
-      }
-    });
 
     // Default date to today
     dateEl.value = new Date().toISOString().slice(0,10);
 
+    // Check activation status on load
+    checkActivationStatus();
+
     // Theme switcher
     function setTheme(theme){
-      themeBtns.forEach(b => b.classList.remove('active'));
-      if(theme === 'green'){
-        document.getElementById('themeGreen').classList.add('active');
-        document.documentElement.style.setProperty('--grad1', '#059669');
-        document.documentElement.style.setProperty('--grad2', '#10b981');
-        document.documentElement.style.setProperty('--grad3', '#06b6d4');
-      } else if(theme === 'gold'){
-        document.getElementById('themeGold').classList.add('active');
-        document.documentElement.style.setProperty('--grad1', '#d97706');
-        document.documentElement.style.setProperty('--grad2', '#f59e0b');
-        document.documentElement.style.setProperty('--grad3', '#eab308');
-      } else {
-        document.getElementById('themeBlue').classList.add('active');
-        document.documentElement.style.setProperty('--grad1', '#4f46e5');
-        document.documentElement.style.setProperty('--grad2', '#0ea5e9');
-        document.documentElement.style.setProperty('--grad3', '#3b82f6');
-      }
+        themeBtns.forEach(b => b.classList.remove('active'));
+        if(theme === 'green'){
+            document.getElementById('themeGreen').classList.add('active');
+            document.documentElement.style.setProperty('--grad1', '#059669');
+            document.documentElement.style.setProperty('--grad2', '#10b981');
+            document.documentElement.style.setProperty('--grad3', '#06b6d4');
+        } else if(theme === 'gold'){
+            document.getElementById('themeGold').classList.add('active');
+            document.documentElement.style.setProperty('--grad1', '#d97706');
+            document.documentElement.style.setProperty('--grad2', '#f59e0b');
+            document.documentElement.style.setProperty('--grad3', '#eab308');
+        } else {
+            document.getElementById('themeBlue').classList.add('active');
+            document.documentElement.style.setProperty('--grad1', '#4f46e5');
+            document.documentElement.style.setProperty('--grad2', '#0ea5e9');
+            document.documentElement.style.setProperty('--grad3', '#3b82f6');
+        }
     }
     themeBtns.forEach(btn => btn.addEventListener('click', ()=> setTheme(btn.dataset.theme)));
     setTheme('blue');
 
     // File preview helper
     function setupFilePreview(inputEl, previewEl, setDataFn, opt = {maxWidth:140}) {
-      inputEl.addEventListener('change', function(){
-        const file = this.files && this.files[0];
-        if(!file){ setDataFn(null); previewEl.textContent = 'No image uploaded'; return; }
-        const reader = new FileReader();
-        reader.onload = e => {
-          const dataURL = e.target.result;
-          setDataFn(dataURL);
-          previewEl.innerHTML = '';
-          const img = document.createElement('img');
-          img.src = dataURL;
-          img.alt = 'Preview';
-          img.style.maxWidth = (opt.maxWidth || 140) + 'px';
-          previewEl.appendChild(img);
+        inputEl.addEventListener('change', function(){
+            const file = this.files && this.files[0];
+            if(!file){ setDataFn(null); previewEl.textContent = 'No image uploaded'; return; }
+            const reader = new FileReader();
+            reader.onload = e => {
+                const dataURL = e.target.result;
+                setDataFn(dataURL);
+                previewEl.innerHTML = '';
+                const img = document.createElement('img');
+                img.src = dataURL;
+                img.alt = 'Preview';
+                img.style.maxWidth = (opt.maxWidth || 140) + 'px';
+                previewEl.appendChild(img);
 
-          const removeBtn = document.createElement('button');
-          removeBtn.type = 'button';
-          removeBtn.className = 'remove-btn';
-          removeBtn.innerText = 'Remove';
-          removeBtn.onclick = ()=>{
-            setDataFn(null);
-            inputEl.value = '';
-            previewEl.textContent = 'No image uploaded';
-          };
-          previewEl.appendChild(removeBtn);
-        };
-        reader.readAsDataURL(file);
-      });
+                const removeBtn = document.createElement('button');
+                removeBtn.type = 'button';
+                removeBtn.className = 'remove-btn';
+                removeBtn.innerText = 'Remove';
+                removeBtn.onclick = ()=>{
+                    setDataFn(null);
+                    inputEl.value = '';
+                    previewEl.textContent = 'No image uploaded';
+                };
+                previewEl.appendChild(removeBtn);
+            };
+            reader.readAsDataURL(file);
+        });
     }
 
     let logoDataURL = null;
@@ -612,402 +611,547 @@
 
     // Arrears auto-calc: arrears = total - paid
     function updateArrears(){
-      const total = parseFloat(totalAmountEl.value) || 0;
-      const paid = parseFloat(amountPaidEl.value) || 0;
-      const diff = (total - paid);
-      arrearsEl.value = diff.toFixed(2);
+        const total = parseFloat(totalAmountEl.value) || 0;
+        const paid = parseFloat(amountPaidEl.value) || 0;
+        const diff = (total - paid);
+        arrearsEl.value = diff.toFixed(2);
     }
     totalAmountEl.addEventListener('input', updateArrears);
     amountPaidEl.addEventListener('input', updateArrears);
 
     // Generate SR-XXXX-XXXX-XXXX
     function generateSRKey() {
-      const chunk = () => Math.random().toString(36).substr(2,5).toUpperCase().replace(/[^A-Z0-9]/g,'A').padEnd(5,'A');
-      return `SR-${chunk()}-${chunk()}-${chunk()}`;
+        const chunk = () => Math.random().toString(36).substr(2,5).toUpperCase().replace(/[^A-Z0-9]/g,'A').padEnd(5,'A');
+        return `SR-${chunk()}-${chunk()}-${chunk()}`;
+    }
+
+    // Check activation status
+    async function checkActivationStatus() {
+        const activeLicense = JSON.parse(localStorage.getItem(LS_ACTIVE) || 'null');
+        
+        if (activeLicense) {
+            // Check if license is still valid
+            const now = new Date();
+            const expiresAt = new Date(activeLicense.expiresAt);
+            
+            if (now < expiresAt) {
+                isProActive = true;
+                isTrialActive = false;
+                updateStatusBadge(activeLicense);
+                enableProFeatures();
+                return;
+            } else {
+                // License expired
+                localStorage.removeItem(LS_ACTIVE);
+            }
+        }
+
+        // Check trial status
+        if (receiptCount >= 3) {
+            isTrialActive = false;
+            disableFeatures();
+            updateStatusBadge();
+        } else {
+            isTrialActive = true;
+            updateStatusBadge();
+        }
+    }
+
+    function updateStatusBadge(license = null) {
+        if (license) {
+            const daysLeft = Math.ceil((new Date(license.expiresAt).getTime() - Date.now()) / (24 * 3600 * 1000));
+            statusBadge.textContent = `🔓 Pro — ${license.email} (${daysLeft} day${daysLeft !== 1 ? 's' : ''} left)`;
+            statusBadge.style.background = 'rgba(34, 197, 94, 0.3)';
+        } else if (!isTrialActive) {
+            statusBadge.textContent = '🔒 Trial Expired - Activate Pro';
+            statusBadge.style.background = 'rgba(239, 68, 68, 0.3)';
+        } else {
+            const remaining = 3 - receiptCount;
+            statusBadge.textContent = `🔓 Trial - ${remaining} receipt${remaining !== 1 ? 's' : ''} left`;
+            statusBadge.style.background = 'rgba(255, 255, 255, 0.06)';
+        }
+    }
+
+    function enableProFeatures() {
+        generateBtn.disabled = false;
+        generateBtn.style.opacity = '1';
+        activateBtnUI.style.display = 'none';
+    }
+
+    function disableFeatures() {
+        generateBtn.disabled = true;
+        generateBtn.style.opacity = '0.5';
+        activateBtnUI.style.display = 'block';
     }
 
     // Admin list rendering - dynamic
-    function renderAdminKeys(){
-      const arr = readKeys();
-      adminKeysList.innerHTML = '';
-      if(arr.length === 0){
-        adminKeysList.innerHTML = '<tr><td colspan="6" style="color:rgba(255,255,255,0.6);padding:12px">No keys yet</td></tr>';
-        return;
-      }
-      // show newest first
-      arr.slice().reverse().forEach(rec => {
-        const tr = document.createElement('tr');
-        const activated = rec.activatedAt ? (new Date(rec.activatedAt)).toLocaleString() : '-';
-        const expires = rec.expiresAt ? (new Date(rec.expiresAt)).toLocaleString() : '-';
-        tr.innerHTML = `
-          <td style="padding:8px;max-width:180px;word-break:break-word">${escapeHtml(rec.email || '(no email)')}</td>
-          <td style="padding:8px;max-width:220px;word-break:break-all">${escapeHtml(rec.key)}</td>
-          <td style="padding:8px">${rec.durationDays}d</td>
-          <td style="padding:8px">${escapeHtml(activated)}</td>
-          <td style="padding:8px">${escapeHtml(expires)}</td>
-          <td style="padding:8px;white-space:nowrap">
-            <button data-key="${rec.key}" class="copyKey" style="margin-right:6px">Copy</button>
-            <button data-key="${rec.key}" class="deleteKey" style="background:#ef4444;color:#fff;border:none;padding:6px 8px;border-radius:6px">Delete</button>
-          </td>
-        `;
-        adminKeysList.appendChild(tr);
-      });
+    async function renderAdminKeys(){
+        if (!auth.currentUser) return;
 
-      // attach handlers
-      document.querySelectorAll('.copyKey').forEach(btn => {
-        btn.onclick = () => {
-          const key = btn.getAttribute('data-key');
-          navigator.clipboard.writeText(key).then(()=> alert('Key copied to clipboard')).catch(()=> alert('Copy failed'));
-        };
-      });
-      document.querySelectorAll('.deleteKey').forEach(btn => {
-        btn.onclick = ()=> {
-          if(!confirm('Delete this key?')) return;
-          const key = btn.getAttribute('data-key');
-          const survivors = readKeys().filter(k => k.key !== key);
-          writeKeys(survivors);
-          // clear active if matches
-          const active = JSON.parse(localStorage.getItem(LS_ACTIVE) || 'null');
-          if(active && active.key === key) localStorage.removeItem(LS_ACTIVE);
-          renderAdminKeys();
-          updateStatusBadge();
-        };
-      });
-    }
+        try {
+            const snapshot = await db.collection('activationKeys')
+                .orderBy('createdAt', 'desc')
+                .get();
+            
+            adminKeysList.innerHTML = '';
+            
+            if(snapshot.empty){
+                adminKeysList.innerHTML = '<tr><td colspan="6" style="color:rgba(255,255,255,0.6);padding:12px">No keys yet</td></tr>';
+                return;
+            }
 
-    // Update status badge based on active license
-    function isActivationValid(rec){
-      if(!rec || !rec.expiresAt) return false;
-      return new Date(rec.expiresAt).getTime() > Date.now();
-    }
-    function getCurrentActivation(){
-      try {
-        const raw = localStorage.getItem(LS_ACTIVE);
-        if(!raw) return null;
-        const cur = JSON.parse(raw);
-        // ensure it still matches a stored key and is valid
-        const rec = readKeys().find(k => k.key === cur.key && (k.email||'').toLowerCase() === (cur.email||'').toLowerCase());
-        if(rec && rec.activatedAt && isActivationValid(rec)) return rec;
-      } catch(e){}
-      return null;
-    }
-    function updateStatusBadge(){
-      const cur = getCurrentActivation();
-      if(cur && isActivationValid(cur)){
-        const daysLeft = Math.ceil((new Date(cur.expiresAt).getTime() - Date.now())/(24*3600*1000));
-        statusBadge.textContent = `🔓 Pro — ${cur.email} (${daysLeft} day${daysLeft!==1?'s':''} left)`;
-      } else {
-        statusBadge.textContent = `🔒 Pro: Not activated`;
-      }
+            snapshot.docs.forEach(doc => {
+                const rec = doc.data();
+                const activated = rec.activatedAt ? (new Date(rec.activatedAt.seconds * 1000)).toLocaleString() : '-';
+                const expires = rec.expiresAt ? (new Date(rec.expiresAt.seconds * 1000)).toLocaleString() : '-';
+                const tr = document.createElement('tr');
+                tr.innerHTML = `
+                    <td style="padding:8px;max-width:180px;word-break:break-word">${escapeHtml(rec.email || '(no email)')}</td>
+                    <td style="padding:8px;max-width:220px;word-break:break-all">${escapeHtml(rec.key)}</td>
+                    <td style="padding:8px">${rec.durationDays}d</td>
+                    <td style="padding:8px">${escapeHtml(activated)}</td>
+                    <td style="padding:8px">${escapeHtml(expires)}</td>
+                    <td style="padding:8px;white-space:nowrap">
+                        <button data-key="${rec.key}" class="copyKey" style="margin-right:6px">Copy</button>
+                        <button data-id="${doc.id}" class="deleteKey" style="background:#ef4444;color:#fff;border:none;padding:6px 8px;border-radius:6px">Delete</button>
+                    </td>
+                `;
+                adminKeysList.appendChild(tr);
+            });
+
+            // attach handlers
+            document.querySelectorAll('.copyKey').forEach(btn => {
+                btn.onclick = () => {
+                    const key = btn.getAttribute('data-key');
+                    navigator.clipboard.writeText(key).then(()=> alert('Key copied to clipboard')).catch(()=> alert('Copy failed'));
+                };
+            });
+            document.querySelectorAll('.deleteKey').forEach(btn => {
+                btn.onclick = async () => {
+                    if(!confirm('Delete this key?')) return;
+                    const id = btn.getAttribute('data-id');
+                    try {
+                        await db.collection('activationKeys').doc(id).delete();
+                        renderAdminKeys();
+                        alert('Key deleted successfully');
+                    } catch (error) {
+                        alert('Error deleting key: ' + error.message);
+                    }
+                };
+            });
+        } catch (error) {
+            console.error('Error loading keys:', error);
+            adminKeysList.innerHTML = '<tr><td colspan="6" style="color:#ef4444;padding:12px">Error loading keys</td></tr>';
+        }
     }
 
     // Generate key (admin)
-    generateKeyBtn.addEventListener('click', ()=>{
-      const email = (newKeyEmail.value || '').trim();
-      const durationDays = Number(newKeyDuration.value || 30);
-      if(!email){ alert('Please enter an email to assign the key to.'); return; }
-      if(![15,30,60].includes(durationDays)){ alert('Invalid duration'); return; }
-      const key = generateSRKey();
-      const now = new Date();
-      const rec = { key, email, durationDays, createdAt: now.toISOString(), activatedAt: null, expiresAt: null };
-      const arr = readKeys(); arr.push(rec); writeKeys(arr);
-      newKeyEmail.value = '';
-      renderAdminKeys(); // dynamic update
-      alert(`Key created for ${rec.email}\nKey: ${rec.key}`);
-      updateStatusBadge();
+    generateKeyBtn.addEventListener('click', async ()=>{
+        if (!auth.currentUser) {
+            alert('Please log in as admin first');
+            return;
+        }
+
+        const email = (newKeyEmail.value || '').trim();
+        const durationDays = Number(newKeyDuration.value || 30);
+        if(!email){ alert('Please enter an email to assign the key to.'); return; }
+        if(![15,30,60].includes(durationDays)){ alert('Invalid duration'); return; }
+        
+        const key = generateSRKey();
+        const now = new Date();
+        
+        try {
+            await db.collection('activationKeys').add({
+                key,
+                email,
+                durationDays,
+                createdAt: firebase.firestore.FieldValue.serverTimestamp(),
+                activatedAt: null,
+                expiresAt: null,
+                createdBy: auth.currentUser.uid
+            });
+            
+            newKeyEmail.value = '';
+            renderAdminKeys();
+            alert(`Key created for ${email}\nKey: ${key}`);
+        } catch (error) {
+            alert('Error creating key: ' + error.message);
+        }
     });
 
     // Manual activate (admin) - pre-activated license for specific email
-    manualActivateBtn.addEventListener('click', ()=>{
-      const email = (newKeyEmail.value || '').trim();
-      if(!email){ alert('Enter email to pre-activate or choose an existing key'); return; }
-      const arr = readKeys();
-      let rec = arr.find(k => (k.email||'').toLowerCase() === email.toLowerCase() && !k.activatedAt);
-      if(!rec){
-        // create & activate
+    manualActivateBtn.addEventListener('click', async ()=>{
+        if (!auth.currentUser) {
+            alert('Please log in as admin first');
+            return;
+        }
+
+        const email = (newKeyEmail.value || '').trim();
+        if(!email){ alert('Enter email to pre-activate or choose an existing key'); return; }
+        
+        const durationDays = Number(newKeyDuration.value || 30);
         const key = generateSRKey();
         const now = new Date();
-        const durationDays = Number(newKeyDuration.value || 30);
-        rec = { key, email, durationDays, createdAt: now.toISOString(), activatedAt: now.toISOString(), expiresAt: new Date(now.getTime()+durationDays*24*3600*1000).toISOString() };
-        arr.push(rec);
-      } else {
-        const now = new Date();
-        rec.activatedAt = now.toISOString();
-        rec.expiresAt = new Date(now.getTime() + rec.durationDays*24*3600*1000).toISOString();
-      }
-      writeKeys(arr);
-      newKeyEmail.value = '';
-      renderAdminKeys();
-      updateStatusBadge();
-      alert(`Activated license for ${rec.email}\nKey: ${rec.key}`);
+        const expiresAt = new Date(now.getTime() + durationDays * 24 * 3600 * 1000);
+
+        try {
+            await db.collection('activationKeys').add({
+                key,
+                email,
+                durationDays,
+                createdAt: firebase.firestore.FieldValue.serverTimestamp(),
+                activatedAt: firebase.firestore.FieldValue.serverTimestamp(),
+                expiresAt: firebase.firestore.Timestamp.fromDate(expiresAt),
+                createdBy: auth.currentUser.uid
+            });
+            
+            newKeyEmail.value = '';
+            renderAdminKeys();
+            alert(`Activated license for ${email}\nKey: ${key}`);
+        } catch (error) {
+            alert('Error activating license: ' + error.message);
+        }
     });
 
     // Activation modal logic
-    function showProModal(){ proModalBackdrop.classList.add('show'); proModalBackdrop.setAttribute('aria-hidden','false'); activationMsg.textContent=''; licenseEmail.value=''; licenseKeyInput.value=''; licenseEmail.focus(); }
-    function hideProModal(){ proModalBackdrop.classList.remove('show'); proModalBackdrop.setAttribute('aria-hidden','true'); activationMsg.textContent=''; }
-
-    document.getElementById('activateBtnUI').addEventListener('click', showProModal);
-    modalCloseBtn.addEventListener('click', hideProModal);
-
-    function findKeyForEmailAndKey(email,key){
-      const arr = readKeys();
-      return arr.find(r => r.key === key && (r.email||'').toLowerCase() === (email||'').toLowerCase()) || null;
+    function showProModal(){ 
+        proModalBackdrop.classList.add('show'); 
+        proModalBackdrop.setAttribute('aria-hidden','false'); 
+        activationMsg.textContent=''; 
+        licenseEmail.value=''; 
+        licenseKeyInput.value=''; 
+        licenseEmail.focus(); 
+    }
+    
+    function hideProModal(){ 
+        proModalBackdrop.classList.remove('show'); 
+        proModalBackdrop.setAttribute('aria-hidden','true'); 
+        activationMsg.textContent=''; 
     }
 
-    async function activateKeyForUser(email,key){
-      activationMsg.style.color = '#fff';
-      activationMsg.textContent = 'Validating...';
-      await new Promise(r=>setTimeout(r,400));
-      const rec = findKeyForEmailAndKey(email,key);
-      if(!rec){ activationMsg.style.color='#fca5a5'; activationMsg.textContent='Key not found for that email.'; return false; }
-      if(rec.activatedAt && rec.expiresAt && isActivationValid(rec)){
-        localStorage.setItem(LS_ACTIVE, JSON.stringify(rec));
-        activationMsg.style.color = '#86efac';
-        activationMsg.textContent = 'Already activated — Pro enabled.';
-        updateStatusBadge();
-        setTimeout(hideProModal,700);
-        return true;
-      }
-      // activate now
-      const now = new Date();
-      const expires = new Date(now.getTime() + rec.durationDays*24*3600*1000);
-      const updated = readKeys().map(k => k.key === rec.key && k.createdAt === rec.createdAt ? Object.assign({},k,{activatedAt:now.toISOString(),expiresAt:expires.toISOString()}) : k);
-      writeKeys(updated);
-      const newRec = updated.find(k => k.key === rec.key && k.createdAt === rec.createdAt);
-      localStorage.setItem(LS_ACTIVE, JSON.stringify(newRec));
-      activationMsg.style.color = '#86efac';
-      activationMsg.textContent = 'Activated — Pro unlocked.';
-      updateStatusBadge();
-      setTimeout(hideProModal,700);
-      return true;
+    activateBtnUI.addEventListener('click', showProModal);
+    modalCloseBtn.addEventListener('click', hideProModal);
+
+    async function activateKeyForUser(email, key){
+        activationMsg.style.color = '#fff';
+        activationMsg.textContent = 'Validating...';
+        
+        try {
+            // Query Firestore for the key
+            const snapshot = await db.collection('activationKeys')
+                .where('key', '==', key)
+                .where('email', '==', email.toLowerCase())
+                .get();
+
+            if (snapshot.empty) {
+                activationMsg.style.color = '#fca5a5';
+                activationMsg.textContent = 'Invalid key or email combination.';
+                return false;
+            }
+
+            const doc = snapshot.docs[0];
+            const rec = doc.data();
+
+            // Check if already activated
+            if (rec.activatedAt && rec.expiresAt) {
+                const expiresAt = rec.expiresAt.toDate();
+                if (expiresAt > new Date()) {
+                    // Already activated and valid
+                    const licenseData = {
+                        key: rec.key,
+                        email: rec.email,
+                        expiresAt: expiresAt.toISOString(),
+                        durationDays: rec.durationDays
+                    };
+                    localStorage.setItem(LS_ACTIVE, JSON.stringify(licenseData));
+                    
+                    activationMsg.style.color = '#86efac';
+                    activationMsg.textContent = 'Already activated — Pro enabled.';
+                    checkActivationStatus();
+                    setTimeout(hideProModal, 1500);
+                    return true;
+                } else {
+                    activationMsg.style.color = '#fca5a5';
+                    activationMsg.textContent = 'License has expired.';
+                    return false;
+                }
+            }
+
+            // Activate now
+            const now = new Date();
+            const expiresAt = new Date(now.getTime() + rec.durationDays * 24 * 3600 * 1000);
+            
+            await db.collection('activationKeys').doc(doc.id).update({
+                activatedAt: firebase.firestore.FieldValue.serverTimestamp(),
+                expiresAt: firebase.firestore.Timestamp.fromDate(expiresAt)
+            });
+
+            const licenseData = {
+                key: rec.key,
+                email: rec.email,
+                expiresAt: expiresAt.toISOString(),
+                durationDays: rec.durationDays
+            };
+            localStorage.setItem(LS_ACTIVE, JSON.stringify(licenseData));
+            
+            activationMsg.style.color = '#86efac';
+            activationMsg.textContent = 'Activated — Pro unlocked.';
+            checkActivationStatus();
+            setTimeout(hideProModal, 1500);
+            return true;
+
+        } catch (error) {
+            console.error('Activation error:', error);
+            activationMsg.style.color = '#fca5a5';
+            activationMsg.textContent = 'Error activating. Please try again.';
+            return false;
+        }
     }
 
     modalActivateBtn.addEventListener('click', async ()=>{
-      const email = (licenseEmail.value||'').trim();
-      const key = (licenseKeyInput.value||'').trim();
-      if(!email || !key){ activationMsg.style.color='#fca5a5'; activationMsg.textContent='Enter email and key.'; return; }
-      await activateKeyForUser(email,key);
+        const email = (licenseEmail.value||'').trim().toLowerCase();
+        const key = (licenseKeyInput.value||'').trim();
+        if(!email || !key){ 
+            activationMsg.style.color='#fca5a5'; 
+            activationMsg.textContent='Enter email and key.'; 
+            return; 
+        }
+        await activateKeyForUser(email, key);
     });
 
-    // Admin triple click detection -> open PIN modal
-    let clickCount = 0, clickTimer = null;
-    appTitle.addEventListener('click', ()=> {
-      clickCount++;
-      if(clickTimer) clearTimeout(clickTimer);
-      clickTimer = setTimeout(()=> clickCount = 0, 700);
-      if(clickCount >= 3){
-        clickCount = 0;
+    // Admin authentication
+    function showAdminLoginModal() {
         adminPinBackdrop.classList.add('show');
         adminPinBackdrop.setAttribute('aria-hidden','false');
         adminPinInput.value = '';
         adminPinInput.focus();
         adminPinMsg.textContent = '';
-      }
+        // Change title to indicate login
+        document.getElementById('adminPinTitle').textContent = 'Admin Login';
+        adminPinInput.placeholder = 'Enter admin password';
+    }
+
+    async function handleAdminLogin(password) {
+        try {
+            // Sign in with email and password
+            await auth.signInWithEmailAndPassword(ADMIN_EMAIL, password);
+            adminPinMsg.style.color = '#86efac';
+            adminPinMsg.textContent = 'Login successful!';
+            
+            setTimeout(() => {
+                adminPinBackdrop.classList.remove('show');
+                adminPinBackdrop.setAttribute('aria-hidden','true');
+                openAdminFullscreen();
+            }, 500);
+            
+        } catch (error) {
+            console.error('Login error:', error);
+            adminPinMsg.style.color = '#fca5a5';
+            adminPinMsg.textContent = 'Login failed. Check password.';
+        }
+    }
+
+    // Admin triple click detection -> open login modal
+    let clickCount = 0, clickTimer = null;
+    appTitle.addEventListener('click', ()=> {
+        clickCount++;
+        if(clickTimer) clearTimeout(clickTimer);
+        clickTimer = setTimeout(()=> clickCount = 0, 700);
+        if(clickCount >= 3){
+            clickCount = 0;
+            showAdminLoginModal();
+        }
     });
 
     function openAdminFullscreen(){
-      adminFullscreen.classList.add('show');
-      adminFullscreen.setAttribute('aria-hidden','false');
-      renderAdminKeys();
+        adminFullscreen.classList.add('show');
+        adminFullscreen.setAttribute('aria-hidden','false');
+        renderAdminKeys();
     }
+    
     function closeAdminFullscreen(){
-      adminFullscreen.classList.remove('show');
-      adminFullscreen.setAttribute('aria-hidden','true');
+        adminFullscreen.classList.remove('show');
+        adminFullscreen.setAttribute('aria-hidden','true');
+        // Sign out admin
+        auth.signOut();
     }
 
-    adminPinClose.addEventListener('click', ()=> { adminPinBackdrop.classList.remove('show'); adminPinBackdrop.setAttribute('aria-hidden','true'); });
+    adminPinClose.addEventListener('click', ()=> { 
+        adminPinBackdrop.classList.remove('show'); 
+        adminPinBackdrop.setAttribute('aria-hidden','true'); 
+    });
+    
     closeAdminBtn.addEventListener('click', closeAdminFullscreen);
 
     adminPinSubmit.addEventListener('click', ()=> {
-      const pin = (adminPinInput.value||'').trim();
-      if(pin === ADMIN_PIN){
-        adminPinMsg.style.color = '#86efac';
-        adminPinMsg.textContent = 'Unlocked';
-        setTimeout(()=> {
-          adminPinBackdrop.classList.remove('show');
-          adminPinBackdrop.setAttribute('aria-hidden','true');
-          openAdminFullscreen();
-        }, 350);
-      } else {
-        adminPinMsg.style.color = '#fca5a5';
-        adminPinMsg.textContent = 'Incorrect PIN';
-      }
+        const password = (adminPinInput.value||'').trim();
+        if(!password) {
+            adminPinMsg.style.color = '#fca5a5';
+            adminPinMsg.textContent = 'Please enter password';
+            return;
+        }
+        handleAdminLogin(password);
     });
 
-    // seed sample data on first run (dummy test keys)
-    (function seedDummyData(){
-      loadKeysToMemory();
-      if(generatedKeys.length === 0){
-        const now = new Date();
-        const sample1 = { key: 'SR-1234-5678-9012', email: 'demo@example.com', durationDays:30, createdAt: now.toISOString(), activatedAt: now.toISOString(), expiresAt: new Date(now.getTime()+30*24*3600*1000).toISOString() };
-        const sample2 = { key: 'SR-8888-9999-0000', email: 'test@sample.com', durationDays:15, createdAt: now.toISOString(), activatedAt: null, expiresAt: null };
-        generatedKeys = [sample1,sample2];
-        syncKeysToStorage();
-      }
-      renderAdminKeys();
-      updateStatusBadge();
-    })();
+    // Also allow Enter key in admin login
+    adminPinInput.addEventListener('keypress', (e) => {
+        if (e.key === 'Enter') {
+            adminPinSubmit.click();
+        }
+    });
 
-    // restore active license at load (synchronize with current stored keys)
-    (function restoreActive(){
-      loadKeysToMemory();
-      const active = JSON.parse(localStorage.getItem(LS_ACTIVE) || 'null');
-      if(active && isActivationValid(active)){
-        const rec = readKeys().find(k => k.key === active.key && (k.email||'').toLowerCase() === (active.email||'').toLowerCase());
-        if(rec) localStorage.setItem(LS_ACTIVE, JSON.stringify(rec));
-      } else {
-        localStorage.removeItem(LS_ACTIVE);
-      }
-      renderAdminKeys();
-      updateStatusBadge();
-    })();
-
-    // PDF generation - professional layout (kept intact)
+    // PDF generation - professional layout
     async function generatePdf(data){
-      const { jsPDF } = window.jspdf;
-      const doc = new jsPDF({unit:'pt', format:'a4'});
-      const pageWidth = doc.internal.pageSize.getWidth();
+        // Check if user can generate receipt
+        if (!isProActive && !isTrialActive) {
+            alert('Trial expired. Please activate Pro to generate more receipts.');
+            return null;
+        }
 
-      // Header: logo (centered top) and business name
-      const headerY = 36;
-      if(logoDataURL){
-        const logoW = 100;
-        const logoH = 100;
-        const logoX = (pageWidth - logoW) / 2;
-        try{ doc.addImage(logoDataURL, 'PNG', logoX, headerY, logoW, logoH); }
-        catch(e){ try{ doc.addImage(logoDataURL, 'JPEG', logoX, headerY, logoW, logoH); } catch(err){} }
-      }
+        // Increment receipt count for trial users
+        if (isTrialActive && !isProActive) {
+            receiptCount++;
+            localStorage.setItem(LS_RECEIPT_COUNT, receiptCount.toString());
+            checkActivationStatus();
+        }
 
-      const nameY = logoDataURL ? headerY + 120 : headerY + 10;
-      doc.setFont("helvetica","bold"); doc.setFontSize(18);
-      doc.text(data.businessName || 'Business Name', pageWidth/2, nameY, {align:'center'});
-      doc.setFont("helvetica","normal"); doc.setFontSize(11);
-      const contactLine = `${data.businessContact || ''}${data.businessContact && data.businessEmail ? ' | ' : ''}${data.businessEmail || ''}`;
-      doc.text(contactLine.trim(), pageWidth/2, nameY + 16, {align:'center'});
+        const { jsPDF } = window.jspdf;
+        const doc = new jsPDF({unit:'pt', format:'a4'});
+        const pageWidth = doc.internal.pageSize.getWidth();
 
-      // Title
-      doc.setFont("helvetica","bold"); doc.setFontSize(12);
-      doc.text('OFFICIAL RECEIPT', pageWidth/2, nameY + 36, {align:'center'});
-      doc.setLineWidth(0.8); doc.line(48, nameY + 44, pageWidth - 48, nameY + 44);
+        // Header: logo (centered top) and business name
+        const headerY = 36;
+        if(logoDataURL){
+            const logoW = 100;
+            const logoH = 100;
+            const logoX = (pageWidth - logoW) / 2;
+            try{ doc.addImage(logoDataURL, 'PNG', logoX, headerY, logoW, logoH); }
+            catch(e){ try{ doc.addImage(logoDataURL, 'JPEG', logoX, headerY, logoW, logoH); } catch(err){} }
+        }
 
-      // Body
-      let cursorY = nameY + 70; doc.setFont("helvetica","normal"); doc.setFontSize(11);
-      const boxX = 48, boxW = pageWidth - 96, boxY = cursorY, boxH = 170;
-      doc.setDrawColor(200); doc.setLineWidth(0.6); doc.roundedRect(boxX, boxY, boxW, boxH, 6, 6, 'S');
+        const nameY = logoDataURL ? headerY + 120 : headerY + 10;
+        doc.setFont("helvetica","bold"); doc.setFontSize(18);
+        doc.text(data.businessName || 'Business Name', pageWidth/2, nameY, {align:'center'});
+        doc.setFont("helvetica","normal"); doc.setFontSize(11);
+        const contactLine = `${data.businessContact || ''}${data.businessContact && data.businessEmail ? ' | ' : ''}${data.businessEmail || ''}`;
+        doc.text(contactLine.trim(), pageWidth/2, nameY + 16, {align:'center'});
 
-      let rowY = boxY + 24;
-      doc.setFont("helvetica","bold"); doc.text('Payer Name:', boxX+18, rowY); doc.text(data.payerName || '-', boxX + boxW - 18, rowY, {align:'right'}); rowY += 22;
-      doc.text('Total Amount:', boxX+18, rowY); doc.text(`GHS ${data.totalAmount.toFixed(2)}`, boxX + boxW - 18, rowY, {align:'right'}); rowY += 22;
-      doc.text('Amount Paid:', boxX+18, rowY); doc.text(`GHS ${data.amountPaid.toFixed(2)}`, boxX + boxW - 18, rowY, {align:'right'}); rowY += 22;
-      doc.text('Arrears:', boxX+18, rowY); doc.text(`GHS ${data.arrears.toFixed(2)}`, boxX + boxW - 18, rowY, {align:'right'}); rowY += 22;
-      doc.text('Date:', boxX+18, rowY); doc.text(data.date, boxX + boxW - 18, rowY, {align:'right'}); rowY += 22;
-      doc.setFont("helvetica","normal"); doc.text('Purpose:', boxX+18, rowY);
-      const purposeLines = doc.splitTextToSize(data.purpose || '-', boxW - 36);
-      doc.text(purposeLines, boxX+18, rowY + 16);
-      cursorY = boxY + boxH + 12;
+        // Title
+        doc.setFont("helvetica","bold"); doc.setFontSize(12);
+        doc.text('OFFICIAL RECEIPT', pageWidth/2, nameY + 36, {align:'center'});
+        doc.setLineWidth(0.8); doc.line(48, nameY + 44, pageWidth - 48, nameY + 44);
 
-      // Amount in words (simple)
-      try {
-        doc.setFontSize(10);
-        doc.text('Amount (in words): ' + amountInWords(data.amountPaid), boxX+18, cursorY);
-      } catch(e) {}
-      cursorY += 28;
+        // Body
+        let cursorY = nameY + 70; doc.setFont("helvetica","normal"); doc.setFontSize(11);
+        const boxX = 48, boxW = pageWidth - 96, boxY = cursorY, boxH = 170;
+        doc.setDrawColor(200); doc.setLineWidth(0.6); doc.roundedRect(boxX, boxY, boxW, boxH, 6, 6, 'S');
 
-      // Signature
-      if(signatureDataURL){
-        const sigW = 140, sigH = 60;
-        const sigX = pageWidth - 48 - sigW, sigY = cursorY;
-        doc.setFont("helvetica","normal"); doc.text('Authorized Signature:', sigX - 10, sigY - 6, {align:'right'});
-        try{ doc.addImage(signatureDataURL, 'PNG', sigX, sigY, sigW, sigH); }
-        catch(e){ try{ doc.addImage(signatureDataURL, 'JPEG', sigX, sigY, sigW, sigH); }catch(err){} }
-        cursorY += sigH + 16;
-      }
+        let rowY = boxY + 24;
+        doc.setFont("helvetica","bold"); doc.text('Payer Name:', boxX+18, rowY); doc.text(data.payerName || '-', boxX + boxW - 18, rowY, {align:'right'}); rowY += 22;
+        doc.text('Total Amount:', boxX+18, rowY); doc.text(`GHS ${data.totalAmount.toFixed(2)}`, boxX + boxW - 18, rowY, {align:'right'}); rowY += 22;
+        doc.text('Amount Paid:', boxX+18, rowY); doc.text(`GHS ${data.amountPaid.toFixed(2)}`, boxX + boxW - 18, rowY, {align:'right'}); rowY += 22;
+        doc.text('Arrears:', boxX+18, rowY); doc.text(`GHS ${data.arrears.toFixed(2)}`, boxX + boxW - 18, rowY, {align:'right'}); rowY += 22;
+        doc.text('Date:', boxX+18, rowY); doc.text(data.date, boxX + boxW - 18, rowY, {align:'right'}); rowY += 22;
+        doc.setFont("helvetica","normal"); doc.text('Purpose:', boxX+18, rowY);
+        const purposeLines = doc.splitTextToSize(data.purpose || '-', boxW - 36);
+        doc.text(purposeLines, boxX+18, rowY + 16);
+        cursorY = boxY + boxH + 12;
 
-      // Footer
-      doc.setLineWidth(0.6); doc.line(48, cursorY, pageWidth - 48, cursorY);
-      cursorY += 14; doc.setFont("helvetica","italic"); doc.setFontSize(10);
-      doc.text('Thank you for your business!', pageWidth / 2, cursorY, {align:'center'});
-      cursorY += 12; doc.text('Powered by SmartReceipt', pageWidth / 2, cursorY, {align:'center'});
+        // Amount in words (simple)
+        try {
+            doc.setFontSize(10);
+            doc.text('Amount (in words): ' + amountInWords(data.amountPaid), boxX+18, cursorY);
+        } catch(e) {}
+        cursorY += 28;
 
-      return doc.output('blob');
+        // Signature
+        if(signatureDataURL){
+            const sigW = 140, sigH = 60;
+            const sigX = pageWidth - 48 - sigW, sigY = cursorY;
+            doc.setFont("helvetica","normal"); doc.text('Authorized Signature:', sigX - 10, sigY - 6, {align:'right'});
+            try{ doc.addImage(signatureDataURL, 'PNG', sigX, sigY, sigW, sigH); }
+            catch(e){ try{ doc.addImage(signatureDataURL, 'JPEG', sigX, sigY, sigW, sigH); }catch(err){} }
+            cursorY += sigH + 16;
+        }
+
+        // Footer
+        doc.setLineWidth(0.6); doc.line(48, cursorY, pageWidth - 48, cursorY);
+        cursorY += 14; doc.setFont("helvetica","italic"); doc.setFontSize(10);
+        doc.text('Thank you for your business!', pageWidth / 2, cursorY, {align:'center'});
+        cursorY += 12; doc.text('Powered by SmartReceipt', pageWidth / 2, cursorY, {align:'center'});
+
+        return doc.output('blob');
     }
 
     // Basic amount->words (for english Ghana Cedis)
     function amountInWords(n){
-      const small = ['Zero','One','Two','Three','Four','Five','Six','Seven','Eight','Nine','Ten','Eleven','Twelve','Thirteen','Fourteen','Fifteen','Sixteen','Seventeen','Eighteen','Nineteen'];
-      const tens = ['','','Twenty','Thirty','Forty','Fifty','Sixty','Seventy','Eighty','Ninety'];
-      function inWords(num){ num = Math.floor(Math.abs(num)); if(num < 20) return small[num]; if(num < 100) return tens[Math.floor(num/10)] + (num % 10 ? '-' + small[num % 10] : ''); if(num < 1000) return small[Math.floor(num/100)] + ' Hundred' + (num % 100 ? ' and ' + inWords(num % 100) : ''); if(num < 1000000) return inWords(Math.floor(num/1000)) + ' Thousand' + (num % 1000 ? ' ' + inWords(num % 1000) : ''); return num.toString(); }
-      return inWords(Math.floor(n)) + ' Ghana Cedis';
+        const small = ['Zero','One','Two','Three','Four','Five','Six','Seven','Eight','Nine','Ten','Eleven','Twelve','Thirteen','Fourteen','Fifteen','Sixteen','Seventeen','Eighteen','Nineteen'];
+        const tens = ['','','Twenty','Thirty','Forty','Fifty','Sixty','Seventy','Eighty','Ninety'];
+        function inWords(num){ num = Math.floor(Math.abs(num)); if(num < 20) return small[num]; if(num < 100) return tens[Math.floor(num/10)] + (num % 10 ? '-' + small[num % 10] : ''); if(num < 1000) return small[Math.floor(num/100)] + ' Hundred' + (num % 100 ? ' and ' + inWords(num % 100) : ''); if(num < 1000000) return inWords(Math.floor(num/1000)) + ' Thousand' + (num % 1000 ? ' ' + inWords(num % 1000) : ''); return num.toString(); }
+        return inWords(Math.floor(n)) + ' Ghana Cedis';
     }
 
     // Generate event
     generateBtn.addEventListener('click', async ()=>{
-      const data = {
-        businessName: businessNameEl.value.trim(),
-        businessContact: businessContactEl.value.trim(),
-        businessEmail: businessEmailEl.value.trim(),
-        payerName: payerNameEl.value.trim(),
-        totalAmount: Number(totalAmountEl.value) || 0,
-        amountPaid: Number(amountPaidEl.value) || 0,
-        arrears: Number(arrearsEl.value) || 0,
-        date: dateEl.value || new Date().toISOString().slice(0,10),
-        purpose: purposeEl.value.trim()
-      };
-      if(!data.businessName || !data.payerName){ return alert('Please fill Business Name and Payer Name.'); }
-      preview.textContent = 'Generating PDF...';
-      try{
-        const blob = await generatePdf(data);
-        if(window._lastPdf) URL.revokeObjectURL(window._lastPdf);
-        window._lastPdf = URL.createObjectURL(blob);
-        downloadBtn.disabled = false;
-        downloadBtn.onclick = ()=> {
-          const a = document.createElement('a'); a.href = window._lastPdf; a.download = `receipt_${Date.now()}.pdf`; a.click();
+        const data = {
+            businessName: businessNameEl.value.trim(),
+            businessContact: businessContactEl.value.trim(),
+            businessEmail: businessEmailEl.value.trim(),
+            payerName: payerNameEl.value.trim(),
+            totalAmount: Number(totalAmountEl.value) || 0,
+            amountPaid: Number(amountPaidEl.value) || 0,
+            arrears: Number(arrearsEl.value) || 0,
+            date: dateEl.value || new Date().toISOString().slice(0,10),
+            purpose: purposeEl.value.trim()
         };
-        preview.innerHTML = `✅ PDF ready — <a href="${window._lastPdf}" target="_blank">Open PDF</a> — click Download to save.`;
-        alert('Receipt generated.');
-      }catch(err){
-        console.error(err);
-        preview.textContent = 'Error generating PDF. Check console.';
-      }
+        if(!data.businessName || !data.payerName){ return alert('Please fill Business Name and Payer Name.'); }
+        preview.textContent = 'Generating PDF...';
+        try{
+            const blob = await generatePdf(data);
+            if (!blob) return; // Generation was blocked (trial expired)
+            
+            if(window._lastPdf) URL.revokeObjectURL(window._lastPdf);
+            window._lastPdf = URL.createObjectURL(blob);
+            downloadBtn.disabled = false;
+            downloadBtn.onclick = ()=> {
+                const a = document.createElement('a'); a.href = window._lastPdf; a.download = `receipt_${Date.now()}.pdf`; a.click();
+            };
+            preview.innerHTML = `✅ PDF ready — <a href="${window._lastPdf}" target="_blank">Open PDF</a> — click Download to save.`;
+            alert('Receipt generated.');
+        }catch(err){
+            console.error(err);
+            preview.textContent = 'Error generating PDF. Check console.';
+        }
     });
 
     // WhatsApp share (text only)
     whatsappBtn.addEventListener('click', ()=>{
-      const d = { business: businessNameEl.value, payer: payerNameEl.value, total: Number(totalAmountEl.value)||0, paid: Number(amountPaidEl.value)||0, arrears: Number(arrearsEl.value)||0, date: dateEl.value||'' };
-      const text = `Receipt from ${d.business}\nPayer: ${d.payer}\nTotal: GHS ${d.total.toFixed(2)}\nPaid: GHS ${d.paid.toFixed(2)}\nArrears: GHS ${d.arrears.toFixed(2)}\nDate: ${d.date}`;
-      window.open('https://wa.me/?text='+encodeURIComponent(text),'_blank');
+        const d = { business: businessNameEl.value, payer: payerNameEl.value, total: Number(totalAmountEl.value)||0, paid: Number(amountPaidEl.value)||0, arrears: Number(arrearsEl.value)||0, date: dateEl.value||'' };
+        const text = `Receipt from ${d.business}\nPayer: ${d.payer}\nTotal: GHS ${d.total.toFixed(2)}\nPaid: GHS ${d.paid.toFixed(2)}\nArrears: GHS ${d.arrears.toFixed(2)}\nDate: ${d.date}`;
+        window.open('https://wa.me/?text='+encodeURIComponent(text),'_blank');
     });
 
     // Copy summary
     copyBtn.addEventListener('click', async ()=>{
-      const txt = `Receipt — ${businessNameEl.value} | ${payerNameEl.value} | Total: GHS ${Number(totalAmountEl.value||0).toFixed(2)} | Paid: GHS ${Number(amountPaidEl.value||0).toFixed(2)} | Arrears: GHS ${Number(arrearsEl.value||0).toFixed(2)} | Date: ${dateEl.value} | Purpose: ${purposeEl.value}`;
-      try{
-        await navigator.clipboard.writeText(txt);
-        alert('Summary copied to clipboard');
-      }catch(e){
-        alert('Copy failed — please select and copy manually:\n' + txt);
-      }
+        const txt = `Receipt — ${businessNameEl.value} | ${payerNameEl.value} | Total: GHS ${Number(totalAmountEl.value||0).toFixed(2)} | Paid: GHS ${Number(amountPaidEl.value||0).toFixed(2)} | Arrears: GHS ${Number(arrearsEl.value||0).toFixed(2)} | Date: ${dateEl.value} | Purpose: ${purposeEl.value}`;
+        try{
+            await navigator.clipboard.writeText(txt);
+            alert('Summary copied to clipboard');
+        }catch(e){
+            alert('Copy failed — please select and copy manually:\n' + txt);
+        }
     });
 
     // small helper to escape HTML in table cells
     function escapeHtml(s){
-      if(!s && s !== 0) return '';
-      return String(s).replace(/[&<>"']/g, function(m){ return ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[m]); });
+        if(!s && s !== 0) return '';
+        return String(s).replace(/[&<>"']/g, function(m){ return ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[m]); });
     }
 
-    // expose some handy debug methods
-    window.SmartReceipt = {
-      loadKeysToMemory,
-      syncKeysToStorage,
-      readKeys,
-      writeKeys,
-      renderAdminKeys,
-      getCurrentActivation
-    };
-
-  })();
+})();
   </script>
 </body>
 </html>
+
 
 
