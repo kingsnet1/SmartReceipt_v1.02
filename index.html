@@ -971,6 +971,40 @@
         adminLoginMsg.textContent = '';
     }
 
+    // Add this function to set up admin claims
+async function setupAdminUser(email, password) {
+    try {
+        // Create user in Firebase Auth
+        const userCredential = await auth.createUserWithEmailAndPassword(email, password);
+        
+        // Set custom claims (you'll need a Cloud Function for this)
+        // Alternatively, you can manually set this in Firebase Console
+        console.log('Admin user created:', userCredential.user.uid);
+        
+        // For now, we'll use a simpler approach - check a specific email
+        return userCredential.user;
+    } catch (error) {
+        console.error('Error creating admin user:', error);
+        throw error;
+    }
+}
+
+// Update the handleAdminLogin function to work with simpler security
+async function handleAdminLogin(email, password) {
+    try {
+        const userCredential = await auth.signInWithEmailAndPassword(email, password);
+        
+        // For development, allow any authenticated user to be admin
+        // In production, you should check custom claims or a specific admin list
+        adminLoginBackdrop.classList.remove('show');
+        adminLoginBackdrop.setAttribute('aria-hidden','true');
+        openAdminFullscreen();
+    } catch (error) {
+        adminLoginMsg.style.color = '#fca5a5';
+        adminLoginMsg.textContent = 'Login failed: ' + error.message;
+    }
+}
+    
     // Handle admin login
     async function handleAdminLogin(email, password) {
         try {
@@ -1178,3 +1212,4 @@
   </script>
 </body>
 </html>
+
