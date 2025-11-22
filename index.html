@@ -4,8 +4,8 @@
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width,initial-scale=1" />
   <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-app-compat.js"></script>
-<script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-auth-compat.js"></script>
-<script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-firestore-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-auth-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-firestore-compat.js"></script>
   <title>SmartReceipt Pro</title>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
 
@@ -19,7 +19,7 @@
       --glass-border: rgba(255,255,255,0.25);
       --input-bg: rgba(255,255,255,0.18);
       --muted: rgba(255,255,255,0.85);
-      --admin-bg: #0b1220; /* solid admin background */
+      --admin-bg: #0b1220;
     }
 
     /* Make page always scrollable, avoid header jumping on mobile keyboard */
@@ -34,7 +34,7 @@
       animation: gradientShift 10s ease infinite;
       display:block;
       min-height:100vh;
-      padding:28px; /* give space for keyboard on mobile */
+      padding:28px;
       box-sizing:border-box;
     }
     @keyframes gradientShift{
@@ -43,16 +43,14 @@
       100%{background-position:0% 50%}
     }
 
-    /* central wrapper to center container but allow page scrolling */
     .page-wrap{
       display:flex;
       justify-content:center;
-      align-items:flex-start; /* prevents container from jumping up when keyboard opens */
+      align-items:flex-start;
       width:100%;
       margin:0 auto;
     }
 
-    /* ===== Glass card ===== */
     .container{
       width:92%;
       max-width:980px;
@@ -69,14 +67,12 @@
       position: relative;
     }
 
-    /* ===== header area: status badge + title (fixed layout to prevent overlap) ===== */
     .header-row{
       display:block;
       position:relative;
       padding: 6px 0 12px 0;
     }
 
-    /* status badge is anchored left */
     .status-badge {
       position: absolute;
       left: 16px;
@@ -90,7 +86,6 @@
       z-index: 2;
     }
 
-    /* title is centered using absolute centering (left:50% + transform) so badge doesn't push it */
     h1{
       margin:0 0 8px 0;
       font-size:1.6rem;
@@ -108,14 +103,12 @@
       background: transparent;
     }
 
-    /* when title text is long wrap gracefully on small screens */
     @media (max-width:420px){
       h1{ font-size:1.25rem; position: static; transform:none; text-align:center; margin-top:6px; }
       .status-badge{ position: static; margin-bottom:8px; }
       .header-row{ display:flex; flex-direction:column; align-items:center; gap:6px; }
     }
 
-    /* ===== form layout ===== */
     .row{display:flex;gap:12px}
     .col{flex:1}
     form{margin-top:12px}
@@ -127,7 +120,6 @@
       font-size:0.95rem;
     }
 
-    /* make specified inputs bold visually */
     input, textarea, select{
       width:100%;
       padding:9px 10px;
@@ -142,11 +134,7 @@
     }
 
     input::placeholder, textarea::placeholder { color: rgba(255,255,255,0.75); }
-
-    /* class to bold certain inputs' text */
     .bold-input{ font-weight:700; color:#fff; }
-
-    /* small file input tweak */
     input[type="file"]{ padding:6px 8px; background: transparent; }
 
     .logo-preview, .signature-preview{
@@ -204,19 +192,16 @@
       color:#fff;
     }
 
-    /* Theme toggles */
     .theme-switcher{ display:flex; gap:8px; justify-content:center; margin-top:12px; }
     .theme-btn{ padding:8px 10px; border-radius:8px; border:1px solid rgba(255,255,255,0.12); cursor:pointer; background:transparent; color:#fff; font-weight:700;}
     .theme-btn.active{ box-shadow: 0 6px 20px rgba(0,0,0,0.25); transform:translateY(-2px); }
 
-    /* responsive */
     @media (max-width:720px){
       .row{flex-direction:column}
       .actions{flex-direction:column}
       button{width:100%}
     }
 
-    /* ===== modal backdrop ===== */
     .modal-backdrop {
       position: fixed;
       inset: 0;
@@ -235,7 +220,6 @@
       pointer-events: auto;
     }
 
-    /* activation modal (glass) */
     .modal {
       width: 100%;
       max-width: 640px;
@@ -248,7 +232,6 @@
       box-sizing: border-box;
     }
 
-    /* admin panel (fullscreen solid) */
     .admin-fullscreen {
       position: fixed;
       inset: 0;
@@ -274,7 +257,6 @@
 
     .pill { padding:6px 10px; border-radius:999px; background: rgba(255,255,255,0.04); font-weight:700; display:inline-block; color:#fff; }
 
-    /* small screens admin layout */
     @media (max-width:720px){
       .admin-header { flex-direction:column; align-items:flex-start; gap:8px; }
       table.admin-table { font-size:0.8rem; }
@@ -287,18 +269,15 @@
       <div class="header-row">
         <h1 id="appTitle">SmartReceipt Pro</h1>
       </div>
-            <div id="statusBadge" class="status-badge" aria-live="polite">🔒 Pro: Not activated</div>
-        
+      <div id="statusBadge" class="status-badge" aria-live="polite">🔒 Pro: Not activated</div>
 
       <!-- Theme switcher -->
-       <br>
+      <br>
       <div class="theme-switcher" aria-hidden="false">
-        
         <button class="theme-btn active" data-theme="blue" id="themeBlue">Blue</button>
         <button class="theme-btn" data-theme="green" id="themeGreen">Green</button>
         <button class="theme-btn" data-theme="gold" id="themeGold">Gold</button>
       </div>
-      
 
       <form id="receiptForm" autocomplete="off" onsubmit="return false;">
         <!-- Business details -->
@@ -469,7 +448,7 @@
 
   <script>
   (function(){
-    // Firebase Configuration - REPLACE WITH YOUR CONFIG
+    // Firebase Configuration
     const firebaseConfig = {
       apiKey: "AIzaSyCdMifjpX4L5cdkPJZKEZAxgIppUYbS5qk",
       authDomain: "smartreceipt-52dc9.firebaseapp.com",
@@ -499,7 +478,7 @@
     const modalCloseBtn = document.getElementById('modalCloseBtn');
     const activationMsg = document.getElementById('activationMsg');
 
-    // Admin login modal (email and password)
+    // Admin login modal
     const adminLoginBackdrop = document.getElementById('adminLoginBackdrop');
     const adminEmailInput = document.getElementById('adminEmailInput');
     const adminPasswordInput = document.getElementById('adminPasswordInput');
@@ -636,7 +615,7 @@
 
     // Generate SR-XXXX-XXXX-XXXX
     function generateSRKey() {
-        const chunk = () => Math.random().toString(36).substr(2,5).toUpperCase().replace(/[^A-Z0-9]/g,'A').padEnd(5,'A');
+        const chunk = () => Math.random().toString(36).substr(2,4).toUpperCase().replace(/[^A-Z0-9]/g,'A').padEnd(4,'A');
         return `SR-${chunk()}-${chunk()}-${chunk()}`;
     }
 
@@ -672,7 +651,6 @@
         const activeLicense = JSON.parse(localStorage.getItem(LS_ACTIVE) || 'null');
         
         if (activeLicense) {
-            // Check if license is still valid
             const now = new Date();
             const expiresAt = new Date(activeLicense.expiresAt);
             
@@ -683,13 +661,11 @@
                 enableProFeatures();
                 return;
             } else {
-                // License expired
                 localStorage.removeItem(LS_ACTIVE);
                 isProActive = false;
             }
         }
 
-        // Check trial status
         if (receiptCount >= 3) {
             isTrialActive = false;
             disableFeatures();
@@ -727,7 +703,7 @@
         activateBtnUI.style.display = 'block';
     }
 
-    // Admin list rendering - dynamic
+    // Admin list rendering
     async function renderAdminKeys(){
         if (!auth.currentUser) return;
 
@@ -762,7 +738,6 @@
                 adminKeysList.appendChild(tr);
             });
 
-            // attach handlers
             document.querySelectorAll('.copyKey').forEach(btn => {
                 btn.onclick = () => {
                     const key = btn.getAttribute('data-key');
@@ -798,7 +773,6 @@
         const email = (newKeyEmail.value || '').trim().toLowerCase();
         const durationDays = Number(newKeyDuration.value || 30);
         if(!email){ alert('Please enter an email to assign the key to.'); return; }
-        if(![15,20,30].includes(durationDays)){ alert('Invalid duration. Use 15, 20, or 30 days.'); return; }
         
         const key = generateSRKey();
         const now = new Date();
@@ -824,7 +798,7 @@
         }
     });
 
-    // Manual activate (admin) - pre-activated license for specific email
+    // Manual activate (admin)
     manualActivateBtn.addEventListener('click', async ()=>{
         if (!auth.currentUser) {
             alert('Please log in as admin first');
@@ -880,61 +854,36 @@
 
     // Validate activation key against Firebase
     async function validateActivationKey(email, key) {
-  try {
-    // Query with case-insensitive email and exact key match
-    const snapshot = await db.collection('activationKeys')
-      .where('key', '==', key.trim().toUpperCase())
-      .where('email', '==', email.trim().toLowerCase())
-      .limit(1)
-      .get();
+        try {
+            const snapshot = await db.collection('activationKeys')
+                .where('key', '==', key.trim().toUpperCase())
+                .where('email', '==', email.trim().toLowerCase())
+                .limit(1)
+                .get();
 
-    if (snapshot.empty) {
-      return { valid: false, message: 'Invalid activation key or email' };
-    }
+            if (snapshot.empty) {
+                return { valid: false, message: 'Invalid activation key or email' };
+            }
 
-    const doc = snapshot.docs[0];
-    const activationData = doc.data();
+            const doc = snapshot.docs[0];
+            const activationData = doc.data();
 
-    // Check key status
-    if (activationData.status === 'revoked') {
-      return { valid: false, message: 'This key has been revoked by admin' };
-    }
-
-    if (activationData.status === 'used' && activationData.activatedAt) {
-      return { valid: false, message: 'This key has already been activated' };
-    }
-
-    // Check if already activated and still valid
-    if (activationData.activatedAt && activationData.expiresAt) {
-      const expiresAt = activationData.expiresAt.toDate();
-      if (expiresAt > new Date()) {
-        return { 
-          valid: true, 
-          message: 'License already active', 
-          data: activationData,
-          docId: doc.id
-        };
-      } else {
-        return { valid: false, message: 'License has expired' };
-      }
-    }
-
-    return { 
-      valid: true, 
-      message: 'Key valid for activation', 
-      data: activationData,
-      docId: doc.id
-    };
-
-  } catch (error) {
-    console.error('Validation error:', error);
-    return { valid: false, message: 'Error validating key. Please try again.' };
-  }
-}
-
-            // Check if key is valid for activation
             if (activationData.status === 'revoked') {
-                return { valid: false, message: 'This key has been revoked' };
+                return { valid: false, message: 'This key has been revoked by admin' };
+            }
+
+            if (activationData.activatedAt && activationData.status === 'activated') {
+                const expiresAt = activationData.expiresAt.toDate();
+                if (expiresAt > new Date()) {
+                    return { 
+                        valid: true, 
+                        message: 'License already active', 
+                        data: activationData,
+                        docId: doc.id
+                    };
+                } else {
+                    return { valid: false, message: 'License has expired' };
+                }
             }
 
             return { 
@@ -967,14 +916,12 @@
             const now = new Date();
             const expiresAt = new Date(now.getTime() + validation.data.durationDays * 24 * 3600 * 1000);
 
-            // Update the activation key in Firebase
             await db.collection('activationKeys').doc(validation.docId).update({
                 activatedAt: firebase.firestore.FieldValue.serverTimestamp(),
                 expiresAt: firebase.firestore.Timestamp.fromDate(expiresAt),
                 status: 'activated'
             });
 
-            // Store activation in local storage
             const licenseData = {
                 key: key,
                 email: email,
@@ -988,7 +935,6 @@
             activationMsg.style.color = '#86efac';
             activationMsg.textContent = '✅ Activation successful! Pro features unlocked.';
             
-            // Update UI
             setTimeout(() => {
                 checkActivationStatus();
                 hideProModal();
@@ -1015,7 +961,7 @@
         await activateKeyForUser(email, key);
     });
 
-    // Admin authentication with email and password
+    // Admin authentication
     function showAdminLoginModal() {
         adminLoginBackdrop.classList.add('show');
         adminLoginBackdrop.setAttribute('aria-hidden','false');
@@ -1025,61 +971,20 @@
         adminLoginMsg.textContent = '';
     }
 
-   // Enhanced key validation
-async function validateActivationKey(email, key) {
-  try {
-    // Query with case-insensitive email and exact key match
-    const snapshot = await db.collection('activationKeys')
-      .where('key', '==', key.trim().toUpperCase())
-      .where('email', '==', email.trim().toLowerCase())
-      .limit(1)
-      .get();
-
-    if (snapshot.empty) {
-      return { valid: false, message: 'Invalid activation key or email' };
+    // Handle admin login
+    async function handleAdminLogin(email, password) {
+        try {
+            const userCredential = await auth.signInWithEmailAndPassword(email, password);
+            adminLoginBackdrop.classList.remove('show');
+            adminLoginBackdrop.setAttribute('aria-hidden','true');
+            openAdminFullscreen();
+        } catch (error) {
+            adminLoginMsg.style.color = '#fca5a5';
+            adminLoginMsg.textContent = 'Login failed: ' + error.message;
+        }
     }
 
-    const doc = snapshot.docs[0];
-    const activationData = doc.data();
-
-    // Check key status
-    if (activationData.status === 'revoked') {
-      return { valid: false, message: 'This key has been revoked by admin' };
-    }
-
-    if (activationData.status === 'used' && activationData.activatedAt) {
-      return { valid: false, message: 'This key has already been activated' };
-    }
-
-    // Check if already activated and still valid
-    if (activationData.activatedAt && activationData.expiresAt) {
-      const expiresAt = activationData.expiresAt.toDate();
-      if (expiresAt > new Date()) {
-        return { 
-          valid: true, 
-          message: 'License already active', 
-          data: activationData,
-          docId: doc.id
-        };
-      } else {
-        return { valid: false, message: 'License has expired' };
-      }
-    }
-
-    return { 
-      valid: true, 
-      message: 'Key valid for activation', 
-      data: activationData,
-      docId: doc.id
-    };
-
-  } catch (error) {
-    console.error('Validation error:', error);
-    return { valid: false, message: 'Error validating key. Please try again.' };
-  }
-}
-
-    // Admin triple click detection -> open login modal
+    // Admin triple click detection
     let clickCount = 0, clickTimer = null;
     appTitle.addEventListener('click', ()=> {
         clickCount++;
@@ -1100,7 +1005,6 @@ async function validateActivationKey(email, key) {
     function closeAdminFullscreen(){
         adminFullscreen.classList.remove('show');
         adminFullscreen.setAttribute('aria-hidden','true');
-        // Sign out admin
         auth.signOut();
     }
 
@@ -1122,7 +1026,6 @@ async function validateActivationKey(email, key) {
         handleAdminLogin(email, password);
     });
 
-    // Also allow Enter key in admin login
     adminEmailInput.addEventListener('keypress', (e) => {
         if (e.key === 'Enter') {
             adminPasswordInput.focus();
@@ -1135,31 +1038,66 @@ async function validateActivationKey(email, key) {
         }
     });
 
-    // PDF generation function (keep your existing PDF generation code)
+    // PDF generation function
     async function generatePdf(data){
-        // Check if user can generate receipt
         if (!isProActive && !isTrialActive) {
             alert('Trial expired. Please activate Pro to generate more receipts.');
             return null;
         }
 
-        // Increment receipt count for trial users
         if (isTrialActive && !isProActive) {
             receiptCount++;
             localStorage.setItem(LS_RECEIPT_COUNT, receiptCount.toString());
-            
-            // Update Firebase
             await updateReceiptCountInFirebase();
-            
             checkActivationStatus();
         }
 
         const { jsPDF } = window.jspdf;
         const doc = new jsPDF({unit:'pt', format:'a4'});
         const pageWidth = doc.internal.pageSize.getWidth();
+        let y = 40;
 
-        // Your existing PDF generation code here...
-        // [Keep all your existing PDF generation logic]
+        // Add content to PDF
+        doc.setFontSize(20);
+        doc.text('RECEIPT', pageWidth/2, y, {align: 'center'});
+        y += 40;
+
+        doc.setFontSize(12);
+        doc.text(`Business: ${data.businessName}`, 50, y);
+        y += 20;
+        doc.text(`Contact: ${data.businessContact} | Email: ${data.businessEmail}`, 50, y);
+        y += 30;
+
+        doc.text(`Payer: ${data.payerName}`, 50, y);
+        y += 20;
+        doc.text(`Total Amount: GHS ${data.totalAmount.toFixed(2)}`, 50, y);
+        y += 20;
+        doc.text(`Amount Paid: GHS ${data.amountPaid.toFixed(2)}`, 50, y);
+        y += 20;
+        doc.text(`Arrears: GHS ${data.arrears.toFixed(2)}`, 50, y);
+        y += 30;
+
+        doc.text(`Date: ${data.date}`, 50, y);
+        y += 20;
+        doc.text(`Purpose: ${data.purpose}`, 50, y);
+
+        // Add images if available
+        if (logoDataURL) {
+            try {
+                doc.addImage(logoDataURL, 'JPEG', pageWidth - 100, 40, 50, 50);
+            } catch (e) {
+                console.error('Error adding logo:', e);
+            }
+        }
+
+        if (signatureDataURL) {
+            try {
+                doc.addImage(signatureDataURL, 'JPEG', pageWidth - 120, doc.internal.pageSize.getHeight() - 80, 70, 40);
+                doc.text('Authorized Signature', pageWidth - 120, doc.internal.pageSize.getHeight() - 35);
+            } catch (e) {
+                console.error('Error adding signature:', e);
+            }
+        }
 
         return doc.output('blob');
     }
@@ -1185,7 +1123,7 @@ async function validateActivationKey(email, key) {
         preview.textContent = 'Generating PDF...';
         try{
             const blob = await generatePdf(data);
-            if (!blob) return; // Generation was blocked (trial expired)
+            if (!blob) return;
             
             if(window._lastPdf) URL.revokeObjectURL(window._lastPdf);
             window._lastPdf = URL.createObjectURL(blob);
@@ -1203,7 +1141,7 @@ async function validateActivationKey(email, key) {
         }
     });
 
-    // WhatsApp share (text only)
+    // WhatsApp share
     whatsappBtn.addEventListener('click', ()=>{
         const d = { 
             business: businessNameEl.value, 
@@ -1240,5 +1178,3 @@ async function validateActivationKey(email, key) {
   </script>
 </body>
 </html>
-
-
