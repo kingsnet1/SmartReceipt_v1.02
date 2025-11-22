@@ -3,1338 +3,1008 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>SmartReceipt Pro — Ultra SaaS</title>
+
+  <!-- Firebase (compat) for simpler migration; use modular SDK in production if preferred -->
   <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-app-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-auth-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-firestore-compat.js"></script>
-  <title>SmartReceipt Pro</title>
+  <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-storage-compat.js"></script>
+
+  <!-- jsPDF -->
   <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
 
   <style>
-    /* ===== Theme variables (updated by JS theme switcher) ===== */
+    /* Minimal modern UI - tailorable */
     :root{
-      --grad1: #4f46e5;
-      --grad2: #0ea5e9;
-      --grad3: #3b82f6;
-      --glass-bg: rgba(255,255,255,0.12);
-      --glass-border: rgba(255,255,255,0.25);
-      --input-bg: rgba(255,255,255,0.18);
-      --muted: rgba(255,255,255,0.85);
-      --admin-bg: #0b1220; /* solid admin background */
+      --bg1:#0f172a; --card:#071733; --accent:#06b6d4; --muted:#94a3b8; --glass: rgba(255,255,255,0.04);
+      --success:#22c55e; --danger:#ef4444; --text:#e6eef8;
     }
-
-    /* Make page always scrollable, avoid header jumping on mobile keyboard */
-    html,body{height:100%}
-    body{
-      margin:0;
-      font-family: Inter, system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial;
-      -webkit-font-smoothing:antialiased;
-      -moz-osx-font-smoothing:grayscale;
-      background: linear-gradient(135deg,var(--grad1),var(--grad2),var(--grad3));
-      background-size: 400% 400%;
-      animation: gradientShift 10s ease infinite;
-      display:block;
-      min-height:100vh;
-      padding:28px; /* give space for keyboard on mobile */
-      box-sizing:border-box;
-    }
-    @keyframes gradientShift{
-      0%{background-position:0% 50%}
-      50%{background-position:100% 50%}
-      100%{background-position:0% 50%}
-    }
-
-    /* central wrapper to center container but allow page scrolling */
-    .page-wrap{
-      display:flex;
-      justify-content:center;
-      align-items:flex-start; /* prevents container from jumping up when keyboard opens */
-      width:100%;
-      margin:0 auto;
-    }
-
-    /* ===== Glass card ===== */
-    .container{
-      width:92%;
-      max-width:980px;
-      padding:28px;
-      border-radius:18px;
-      background:var(--glass-bg);
-      box-shadow: 0 12px 45px rgba(0,0,0,0.30);
-      border: 1px solid var(--glass-border);
-      backdrop-filter: blur(18px) saturate(120%);
-      -webkit-backdrop-filter: blur(18px) saturate(120%);
-      color: #fff;
-      box-sizing:border-box;
-      margin-bottom: 32px;
-      position: relative;
-    }
-
-    /* ===== header area: status badge + title (fixed layout to prevent overlap) ===== */
-    .header-row{
-      display:block;
-      position:relative;
-      padding: 6px 0 12px 0;
-    }
-
-    /* status badge is anchored left */
-    .status-badge {
-      position: absolute;
-      left: 16px;
-      top: 6px;
-      background: rgba(255,255,255,0.06);
-      padding: 8px 12px;
-      border-radius: 12px;
-      font-weight: 700;
-      font-size: 0.88rem;
-      white-space:nowrap;
-      z-index: 2;
-    }
-
-    /* title is centered using absolute centering (left:50% + transform) so badge doesn't push it */
-    h1{
-      margin:0 0 8px 0;
-      font-size:1.6rem;
-      text-align:center;
-      font-weight:700;
-      letter-spacing:0.2px;
-      cursor: pointer;
-      user-select: none;
-      position: absolute;
-      left: 50%;
-      transform: translateX(-50%);
-      top: 8px;
-      z-index: 1;
-      padding: 4px 8px;
-      background: transparent;
-    }
-
-    /* when title text is long wrap gracefully on small screens */
-    @media (max-width:420px){
-      h1{ font-size:1.25rem; position: static; transform:none; text-align:center; margin-top:6px; }
-      .status-badge{ position: static; margin-bottom:8px; }
-      .header-row{ display:flex; flex-direction:column; align-items:center; gap:6px; }
-    }
-
-    /* ===== form layout ===== */
-    .row{display:flex;gap:12px}
-    .col{flex:1}
-    form{margin-top:12px}
-    label{
-      display:block;
-      margin-top:12px;
-      font-weight:600;
-      color:var(--muted);
-      font-size:0.95rem;
-    }
-
-    /* make specified inputs bold visually */
-    input, textarea, select{
-      width:100%;
-      padding:9px 10px;
-      margin-top:6px;
-      border-radius:8px;
-      border:1px solid rgba(255,255,255,0.18);
-      background:var(--input-bg);
-      color:#fff;
-      font-size:14px;
-      outline:none;
-      box-sizing:border-box;
-    }
-
-    input::placeholder, textarea::placeholder { color: rgba(255,255,255,0.75); }
-
-    /* class to bold certain inputs' text */
-    .bold-input{ font-weight:700; color:#fff; }
-
-    /* small file input tweak */
-    input[type="file"]{ padding:6px 8px; background: transparent; }
-
-    .logo-preview, .signature-preview{
-      margin-top:8px;
-      text-align:center;
-    }
-    .logo-preview img, .signature-preview img{
-      max-width:140px;
-      height:auto;
-      border-radius:8px;
-      border:1px solid rgba(255,255,255,0.18);
-      display:block;
-      margin:8px auto 6px;
-      background: rgba(255,255,255,0.06);
-      padding:6px;
-    }
-
-    .remove-btn{
-      margin-top:6px;
-      background: rgba(239,68,68,0.9);
-      color:#fff;
-      padding:7px 10px;
-      border-radius:8px;
-      border:none;
-      cursor:pointer;
-      font-weight:600;
-    }
-
-    .remove-btn:hover{ transform:translateY(-1px); }
-
-    .actions{
-      margin-top:18px;
-      display:flex;
-      gap:10px;
-      flex-wrap:wrap;
-    }
-    button{
-      background: rgba(255,255,255,0.18);
-      color:#fff;
-      border:none;
-      padding:10px 14px;
-      border-radius:10px;
-      cursor:pointer;
-      font-weight:700;
-      min-width:150px;
-    }
-    button:disabled{ opacity:0.5; cursor:default; }
-
-    .preview{
-      margin-top:18px;
-      padding:12px;
-      border-radius:8px;
-      background: rgba(255,255,255,0.08);
-      border: 1px dashed rgba(255,255,255,0.12);
-      color:#fff;
-    }
-
-    /* Theme toggles */
-    .theme-switcher{ display:flex; gap:8px; justify-content:center; margin-top:12px; }
-    .theme-btn{ padding:8px 10px; border-radius:8px; border:1px solid rgba(255,255,255,0.12); cursor:pointer; background:transparent; color:#fff; font-weight:700;}
-    .theme-btn.active{ box-shadow: 0 6px 20px rgba(0,0,0,0.25); transform:translateY(-2px); }
-
-    /* responsive */
-    @media (max-width:720px){
-      .row{flex-direction:column}
-      .actions{flex-direction:column}
-      button{width:100%}
-    }
-
-    /* ===== modal backdrop ===== */
-    .modal-backdrop {
-      position: fixed;
-      inset: 0;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      background: rgba(0, 0, 0, 0.6);
-      z-index: 9999;
-      opacity: 0;
-      pointer-events: none;
-      transition: opacity 0.18s ease;
-      padding: 18px;
-    }
-    .modal-backdrop.show {
-      opacity: 1;
-      pointer-events: auto;
-    }
-
-    /* activation modal (glass) */
-    .modal {
-      width: 100%;
-      max-width: 640px;
-      border-radius: 12px;
-      padding: 16px;
-      background: linear-gradient(180deg, rgba(255,255,255,0.04), rgba(255,255,255,0.02));
-      border: 1px solid rgba(255,255,255,0.08);
-      color: #fff;
-      box-shadow: 0 12px 40px rgba(0, 0, 0, 0.6);
-      box-sizing: border-box;
-    }
-
-    /* admin panel (fullscreen solid) */
-    .admin-fullscreen {
-      position: fixed;
-      inset: 0;
-      background: var(--admin-bg);
-      color: #fff;
-      z-index: 20000;
-      display: none;
-      padding: 28px;
-      overflow:auto;
-      box-sizing:border-box;
-    }
-    .admin-fullscreen.show { display:block; }
-
-    .admin-header { display:flex; align-items:center; justify-content:space-between; gap:12px; margin-bottom:12px; }
-    .admin-title { font-size:1.4rem; font-weight:700; color:#fff; }
-    .admin-actions { display:flex; gap:8px; align-items:center; }
-
-    .admin-panel-box { background: #071026; padding:12px; border-radius:8px; border:1px solid rgba(255,255,255,0.04); }
-
-    table.admin-table { width:100%; border-collapse:collapse; margin-top:12px; font-size:0.95rem; color:#fff; }
-    table.admin-table th, table.admin-table td { border:1px solid rgba(255,255,255,0.06); padding:8px; text-align:left; vertical-align:middle; }
-    table.admin-table th { background: rgba(255,255,255,0.03); font-weight:700; color:#fff; }
-
-    .pill { padding:6px 10px; border-radius:999px; background: rgba(255,255,255,0.04); font-weight:700; display:inline-block; color:#fff; }
-
-    /* small screens admin layout */
-    @media (max-width:720px){
-      .admin-header { flex-direction:column; align-items:flex-start; gap:8px; }
-      table.admin-table { font-size:0.8rem; }
-    }
+    html,body{height:100%;margin:0;font-family:Inter,Segoe UI,Roboto,Arial;background:linear-gradient(135deg,#0f172a,#04263a);color:var(--text)}
+    .wrap{max-width:1100px;margin:28px auto;padding:22px;background:linear-gradient(180deg, rgba(255,255,255,0.02), rgba(255,255,255,0.01));border-radius:12px;box-shadow:0 10px 30px rgba(0,0,0,0.6);border:1px solid rgba(255,255,255,0.04)}
+    header{display:flex;align-items:center;justify-content:space-between;gap:12px}
+    h1{margin:0;font-size:1.25rem}
+    .controls{display:flex;gap:8px;align-items:center}
+    button{background:var(--glass);border:1px solid rgba(255,255,255,0.06);color:var(--text);padding:8px 12px;border-radius:8px;cursor:pointer;font-weight:700}
+    button.primary{background:linear-gradient(90deg,var(--accent),#4f46e5);box-shadow:0 8px 30px rgba(79,70,229,0.08)}
+    .layout{display:grid;grid-template-columns:1fr 380px;gap:18px;margin-top:18px}
+    .card{background:rgba(255,255,255,0.02);padding:14px;border-radius:10px;border:1px solid rgba(255,255,255,0.03)}
+    label{display:block;margin-top:10px;color:var(--muted);font-weight:600}
+    input,textarea,select{width:100%;padding:10px;border-radius:8px;border:1px solid rgba(255,255,255,0.06);background:transparent;color:var(--text);margin-top:6px;box-sizing:border-box}
+    .row{display:flex;gap:10px}
+    .row .col{flex:1}
+    .actions{display:flex;gap:8px;margin-top:12px;flex-wrap:wrap}
+    .preview{margin-top:12px;padding:12px;border-radius:8px;background:rgba(255,255,255,0.02);border:1px dashed rgba(255,255,255,0.03)}
+    .small{font-size:0.85rem;color:var(--muted)}
+    .logo-preview img, .signature-preview img{max-width:140px;border-radius:6px;display:block;margin-top:8px}
+    table{width:100%;border-collapse:collapse;color:var(--text)}
+    th,td{padding:8px;border-bottom:1px solid rgba(255,255,255,0.03);text-align:left}
+    .admin-banner{background:linear-gradient(90deg,#02172a,#012a3f);padding:10px;border-radius:8px;color:var(--text);margin-top:10px}
+    .muted{color:var(--muted)}
+    @media (max-width:980px){ .layout{grid-template-columns:1fr} }
   </style>
 </head>
 <body>
-  <div class="page-wrap">
-    <div class="container" role="region" aria-label="SmartReceipt Form">
-      <div class="header-row">
-        <h1 id="appTitle">SmartReceipt Pro</h1>
-      </div>
-            <div id="statusBadge" class="status-badge" aria-live="polite">🔒 Pro: Not activated</div>
-        
-
-      <!-- Theme switcher -->
-       <br>
-      <div class="theme-switcher" aria-hidden="false">
-        
-        <button class="theme-btn active" data-theme="blue" id="themeBlue">Blue</button>
-        <button class="theme-btn" data-theme="green" id="themeGreen">Green</button>
-        <button class="theme-btn" data-theme="gold" id="themeGold">Gold</button>
-      </div>
-      
-
-      <form id="receiptForm" autocomplete="off" onsubmit="return false;">
-        <!-- Business details -->
-        <label>Business Name
-          <input id="businessName" placeholder="e.g. KingsNet Web Solutions" required>
-        </label>
-
-        <div class="row">
-          <div class="col">
-            <label>Business Contact
-              <input id="businessContact" placeholder="+233 20 000 0000" required>
-            </label>
-          </div>
-          <div class="col">
-            <label>Business Email
-              <input id="businessEmail" type="email" placeholder="info@business.com" required>
-            </label>
-          </div>
-        </div>
-
-        <!-- Logo upload -->
-        <label>Upload Business Logo
-          <input id="businessLogo" type="file" accept="image/*">
-        </label>
-        <div class="logo-preview" id="logoPreview">No logo uploaded</div>
-
-        <!-- Payer and amounts -->
-        <label style="margin-top:14px;">Payer Name
-          <input id="payerName" class="bold-input" placeholder="Full name of payer" required>
-        </label>
-
-        <div class="row">
-          <div class="col">
-            <label>Total Amount
-              <input id="totalAmount" type="number" class="bold-input" step="0.01" placeholder="Total amount (GHS)" required>
-            </label>
-          </div>
-          <div class="col">
-            <label>Amount Paid
-              <input id="amountPaid" type="number" class="bold-input" step="0.01" placeholder="Amount paid (GHS)" required>
-            </label>
-          </div>
-        </div>
-
-        <div class="row">
-          <div class="col">
-            <label>Arrears
-              <input id="arrears" type="text" class="bold-input" placeholder="Auto-calculated" readonly>
-            </label>
-          </div>
-          <div class="col">
-            <label>Date
-              <input id="date" type="date" class="bold-input">
-            </label>
-          </div>
-        </div>
-
-        <label>Purpose
-          <textarea id="purpose" rows="2" placeholder="Payment for..."></textarea>
-        </label>
-
-        <!-- Signature upload -->
-        <label>Upload Digital Signature
-          <input id="signatureUpload" type="file" accept="image/*">
-        </label>
-        <div class="signature-preview" id="signaturePreview">No signature uploaded</div>
-
-        <!-- Actions -->
-        <div class="actions" role="group" aria-label="actions">
-          <button type="button" id="generate">Generate PDF</button>
-          <button type="button" id="download" disabled>Download PDF</button>
-          <button type="button" id="whatsapp">Share via WhatsApp</button>
-          <button type="button" id="copySummary">Copy Summary</button>
-          <button type="button" id="activateBtnUI">Activate to Pro</button>
-        </div>
-      </form>
-
-      <div id="preview" class="preview">PDF not generated yet.</div>
-    </div>
-  </div>
-
-  <!-- Activation modal -->
-  <div id="proModalBackdrop" class="modal-backdrop" aria-hidden="true">
-    <div class="modal" role="dialog" aria-modal="true" aria-labelledby="proModalTitle">
-      <h2 id="proModalTitle">Activate SmartReceipt Pro</h2>
-
-      <label>Email
-        <input id="licenseEmail" placeholder="you@example.com" type="email" />
-      </label>
-
-      <label>License Key
-        <input id="licenseKeyInput" placeholder="e.g. SR-ABCD-EFGH-IJKL" />
-      </label>
-
-      <div style="display:flex;gap:8px;justify-content:center;margin-top:12px;">
-        <button id="modalActivateBtn" style="background: #22c55e; color: #fff">Activate</button>
-        <button id="modalCloseBtn" style="background: rgba(255,255,255,0.08); color:#fff">Close</button>
-      </div>
-
-      <p id="activationMsg" style="text-align:center;margin-top:10px;color:#fca5a5;font-weight:700"></p>
-      <p class="muted" style="margin-top:10px">(Activation matches key/email created by admin; stored locally.)</p>
-    </div>
-  </div>
-
-  <!-- Admin Login modal (email and password) -->
-  <div id="adminLoginBackdrop" class="modal-backdrop" aria-hidden="true">
-    <div class="modal" role="dialog" aria-modal="true" aria-labelledby="adminLoginTitle">
-      <h3 id="adminLoginTitle">Admin Login</h3>
-      <p class="muted">Enter admin email and password to access the admin panel.</p>
-      
-      <label>Email
-        <input id="adminEmailInput" type="email" placeholder="Enter admin email" />
-      </label>
-      
-      <label>Password
-        <input id="adminPasswordInput" type="password" placeholder="Enter admin password" />
-      </label>
-      
-      <div style="display:flex;gap:8px;justify-content:center;margin-top:12px;">
-        <button id="adminLoginSubmit" style="background:#2563eb;color:#fff">Login</button>
-        <button id="adminLoginClose" style="background: rgba(255,255,255,0.08); color:#fff">Close</button>
-      </div>
-      <p id="adminLoginMsg" style="text-align:center;margin-top:8px;color:#fca5a5;font-weight:700"></p>
-    </div>
-  </div>
-
-  <!-- Admin fullscreen modal (solid background) -->
-  <div id="adminFullscreen" class="admin-fullscreen" aria-hidden="true">
-    <div class="admin-header">
+  <div class="wrap" role="main" aria-label="SmartReceipt Pro Ultra">
+    <header>
       <div>
-        <div class="admin-title">Admin — License Manager</div>
-        <div class="muted" style="margin-top:6px;color:rgba(255,255,255,0.85)">Manage keys & activations</div>
+        <h1 id="appTitle">SmartReceipt Pro — Ultra</h1>
+        <div class="small">Trial & SaaS-ready receipt generator with cloud sync</div>
       </div>
-      <div class="admin-actions">
-        <button id="closeAdminBtn" style="background:#ef4444;color:#fff;border:none;padding:8px 12px;border-radius:8px;font-weight:700">Close</button>
+      <div class="controls" aria-hidden="false">
+        <div id="statusBadge" class="muted small">Initializing…</div>
+        <button id="themeBtn">Theme</button>
+        <button id="openAdminBtn" title="Open Admin (triple click title or click here)">Admin</button>
+      </div>
+    </header>
+
+    <div class="layout" role="region">
+      <!-- Left: Receipt form -->
+      <section class="card" aria-label="Receipt Form">
+        <h2 style="margin:0 0 6px 0">Create Receipt</h2>
+
+        <form id="receiptForm" autocomplete="off" onsubmit="return false;">
+          <label>Business Name<input id="businessName" placeholder="KingsNet Web Solutions" required></label>
+
+          <div class="row">
+            <div class="col">
+              <label>Contact<input id="businessContact" placeholder="+233 20 000 0000"></label>
+            </div>
+            <div class="col">
+              <label>Email<input id="businessEmail" type="email" placeholder="info@business.com"></label>
+            </div>
+          </div>
+
+          <label>Upload Logo<input id="businessLogo" type="file" accept="image/*"></label>
+          <div class="logo-preview" id="logoPreview">No logo uploaded</div>
+
+          <label>Payer Name<input id="payerName" placeholder="Full name of payer" required></label>
+
+          <div class="row">
+            <div class="col">
+              <label>Total Amount<input id="totalAmount" type="number" step="0.01" placeholder="GHS"></label>
+            </div>
+            <div class="col">
+              <label>Amount Paid<input id="amountPaid" type="number" step="0.01" placeholder="GHS"></label>
+            </div>
+          </div>
+
+          <div class="row">
+            <div class="col">
+              <label>Arrears<input id="arrears" readonly></label>
+            </div>
+            <div class="col">
+              <label>Date<input id="date" type="date"></label>
+            </div>
+          </div>
+
+          <label>Purpose<textarea id="purpose" rows="2" placeholder="Payment for..."></textarea></label>
+
+          <label>Upload Signature<input id="signatureUpload" type="file" accept="image/*"></label>
+          <div class="signature-preview" id="signaturePreview">No signature uploaded</div>
+
+          <div class="actions" role="group" aria-label="Actions">
+            <button type="button" id="generate" class="primary">Generate PDF</button>
+            <button type="button" id="download" disabled>Download</button>
+            <button type="button" id="shareWhatsApp">Share WhatsApp</button>
+            <button type="button" id="copySummary">Copy Summary</button>
+            <button type="button" id="activateBtn">Activate Pro</button>
+            <button type="button" id="backupReceiptBtn">Backup Receipt</button>
+          </div>
+
+          <div id="preview" class="preview">PDF not generated yet.</div>
+        </form>
+      </section>
+
+      <!-- Right: Admin + Info -->
+      <aside class="card" aria-label="Admin & Info">
+        <div id="userPanel">
+          <div class="small muted">User ID: <span id="userIdLabel">—</span></div>
+          <div class="small muted">Receipts used: <span id="receiptCountLabel">0</span></div>
+        </div>
+
+        <div id="proPanel" class="admin-banner" style="display:none">
+          <div><strong id="proInfo">Pro inactive</strong></div>
+          <div class="small muted" id="proNote">Activate to unlock unlimited receipts</div>
+        </div>
+
+        <div style="margin-top:12px">
+          <label>Search Receipts<input id="searchReceipts" placeholder="Search by payer or business"></label>
+          <div id="receiptListPreview" style="max-height:320px;overflow:auto;margin-top:8px"></div>
+        </div>
+
+        <div style="margin-top:12px">
+          <button id="openAdminLogin" style="width:100%">Admin Login</button>
+        </div>
+
+        <div style="margin-top:12px">
+          <div class="small muted">Queue status: <span id="queueStatus">idle</span></div>
+        </div>
+      </aside>
+    </div>
+
+    <!-- Activation Modal -->
+    <div id="proModal" style="display:none;position:fixed;inset:0;background:rgba(2,6,23,0.6);align-items:center;justify-content:center;">
+      <div style="max-width:520px;margin:auto;background:var(--card);padding:16px;border-radius:10px;border:1px solid rgba(255,255,255,0.03)">
+        <h3 style="margin:0 0 8px 0">Activate SmartReceipt Pro</h3>
+        <label>Email<input id="licenseEmail" type="email"></label>
+        <label>License Key<input id="licenseKeyInput"></label>
+        <div style="display:flex;gap:8px;margin-top:12px">
+          <button id="modalActivateBtn" class="primary">Activate</button>
+          <button id="modalCloseBtn">Close</button>
+        </div>
+        <div id="activationMsg" class="small muted" style="margin-top:8px"></div>
       </div>
     </div>
 
-    <div class="admin-panel-box">
-      <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">
-        <input id="newKeyEmail" placeholder="user@example.com" style="flex:1;min-width:200px;padding:8px;border-radius:6px;border:1px solid rgba(255,255,255,0.06);background:transparent;color:#fff" />
-        <select id="newKeyDuration" style="padding:8px;border-radius:6px;border:1px solid rgba(255,255,255,0.06);background:transparent;color:#fff">
-          <option value="15">15 days</option>
-          <option value="30" selected>30 days</option>
-          <option value="60">60 days</option>
-        </select>
-        <button id="generateKeyBtn" style="background:#16a34a;color:#fff;padding:8px 12px;border-radius:8px;border:none;font-weight:700">Generate Key</button>
-        <button id="manualActivateBtn" style="background:#2563eb;color:#fff;padding:8px 12px;border-radius:8px;border:none;font-weight:700">Manual Activate</button>
-      </div>
-
-      <div style="margin-top:12px">
-        <table class="admin-table" style="width:100%;border-collapse:collapse">
-          <thead>
-            <tr style="text-align:left">
-              <th>Email</th>
-              <th>License Key</th>
-              <th>Duration</th>
-              <th>Activated</th>
-              <th>Expires</th>
-              <th>Actions</th>
-            </tr>
-          </thead>
-          <tbody id="adminKeysList" class="admin-list"></tbody>
-        </table>
+    <!-- Admin Login Modal -->
+    <div id="adminLoginModal" style="display:none;position:fixed;inset:0;background:rgba(2,6,23,0.6);align-items:center;justify-content:center;">
+      <div style="max-width:420px;margin:auto;background:var(--card);padding:16px;border-radius:10px;border:1px solid rgba(255,255,255,0.03)">
+        <h3 style="margin:0 0 8px 0">Admin Login</h3>
+        <label>Email<input id="adminEmail" type="email" placeholder="admin@example.com"></label>
+        <label>Password<input id="adminPassword" type="password"></label>
+        <div style="display:flex;gap:8px;margin-top:12px">
+          <button id="adminLoginSubmit" class="primary">Login</button>
+          <button id="adminLoginClose">Close</button>
+        </div>
+        <div id="adminLoginMsg" class="small muted" style="margin-top:8px"></div>
       </div>
     </div>
+
+    <!-- Admin Fullscreen Panel -->
+    <div id="adminPanel" style="display:none;position:fixed;inset:0;background:linear-gradient(90deg,#001428,#03293b);color:var(--text);padding:18px;overflow:auto">
+      <div style="display:flex;justify-content:space-between;align-items:center">
+        <h2 style="margin:0">Admin — License Manager & Logs</h2>
+        <div style="display:flex;gap:8px">
+          <button id="closeAdmin" style="background:var(--danger)">Close</button>
+          <button id="adminSignOut">Sign out admin</button>
+        </div>
+      </div>
+
+      <section style="margin-top:12px" aria-label="Key generator">
+        <div style="display:flex;gap:8px;align-items:center;margin-bottom:8px">
+          <input id="newKeyEmail" placeholder="user@example.com" style="padding:8px;border-radius:6px;background:transparent;border:1px solid rgba(255,255,255,0.06);color:var(--text)">
+          <select id="newKeyDuration" style="padding:8px;border-radius:6px;background:transparent;border:1px solid rgba(255,255,255,0.06);color:var(--text)">
+            <option value="15">15 days</option>
+            <option value="30" selected>30 days</option>
+            <option value="60">60 days</option>
+          </select>
+          <button id="generateKeyBtn" class="primary">Generate Key</button>
+          <button id="manualActivateBtn">Manual Activate</button>
+        </div>
+
+        <div style="margin-top:8px">
+          <table id="adminKeysTable">
+            <thead><tr><th>Email</th><th>Key (hashed)</th><th>Duration</th><th>Activated</th><th>Expires</th><th>Actions</th></tr></thead>
+            <tbody id="adminKeysList"></tbody>
+          </table>
+        </div>
+      </section>
+
+      <section style="margin-top:18px">
+        <h3>Recent Receipts</h3>
+        <div id="adminReceipts" style="max-height:320px;overflow:auto"></div>
+      </section>
+
+      <section style="margin-top:18px">
+        <h3>Activity Logs</h3>
+        <div id="adminLogs" style="max-height:320px;overflow:auto"></div>
+      </section>
+    </div>
+
   </div>
 
-  <script>
-  (function(){
-    // Firebase Configuration - REPLACE WITH YOUR CONFIG
-    const firebaseConfig = {
-      apiKey: "AIzaSyCdMifjpX4L5cdkPJZKEZAxgIppUYbS5qk",
-      authDomain: "smartreceipt-52dc9.firebaseapp.com",
-      projectId: "smartreceipt-52dc9",
-      storageBucket: "smartreceipt-52dc9.firebasestorage.app",
-      messagingSenderId: "345183601946",
-      appId: "1:345183601946:web:d7a24e83e4132345cd18a3"
+<script>
+/* =================== Ultra SmartReceipt Pro — Single File App ===================
+   Notes:
+   - Replace firebaseConfig with your project's values.
+   - You MUST set admin custom claims via Firebase Admin SDK on server side.
+   - This file uses client-side hashing (SHA-256) for activation keys to avoid storing plaintext in Firestore.
+     However, generating keys client-side is still not as secure as generating them server-side.
+     For production, generate keys on server, hash them, and distribute the plaintext to the paying user.
+   - Also update Firestore security rules to enforce admin-only access for activationKeys and admin logs.
+============================================================================= */
+
+(async function(){
+  // ---- FIREBASE CONFIG - REPLACE WITH YOURS ----
+  const firebaseConfig = {
+  apiKey: "AIzaSyCdMifjpX4L5cdkPJZKEZAxgIppUYbS5qk",
+  authDomain: "smartreceipt-52dc9.firebaseapp.com",
+  projectId: "smartreceipt-52dc9",
+  storageBucket: "smartreceipt-52dc9.firebasestorage.app",
+  messagingSenderId: "345183601946",
+  appId: "1:345183601946:web:d7a24e83e4132345cd18a3"
+};
+
+  // Initialize Firebase
+  if (!firebase.apps.length) firebase.initializeApp(firebaseConfig);
+  const auth = firebase.auth();
+  const db = firebase.firestore();
+  const storage = firebase.storage();
+
+  // ---- DOM ----
+  const appTitle = document.getElementById('appTitle');
+  const statusBadge = document.getElementById('statusBadge');
+  const userIdLabel = document.getElementById('userIdLabel');
+  const receiptCountLabel = document.getElementById('receiptCountLabel');
+  const queueStatus = document.getElementById('queueStatus');
+  const proPanel = document.getElementById('proPanel');
+  const proInfo = document.getElementById('proInfo');
+  const proNote = document.getElementById('proNote');
+
+  // Form elements
+  const receiptForm = document.getElementById('receiptForm');
+  const businessNameEl = document.getElementById('businessName');
+  const businessContactEl = document.getElementById('businessContact');
+  const businessEmailEl = document.getElementById('businessEmail');
+  const businessLogo = document.getElementById('businessLogo');
+  const logoPreview = document.getElementById('logoPreview');
+  const payerNameEl = document.getElementById('payerName');
+  const totalAmountEl = document.getElementById('totalAmount');
+  const amountPaidEl = document.getElementById('amountPaid');
+  const arrearsEl = document.getElementById('arrears');
+  const dateEl = document.getElementById('date');
+  const purposeEl = document.getElementById('purpose');
+  const signatureUpload = document.getElementById('signatureUpload');
+  const signaturePreview = document.getElementById('signaturePreview');
+
+  const generateBtn = document.getElementById('generate');
+  const downloadBtn = document.getElementById('download');
+  const shareWhatsAppBtn = document.getElementById('shareWhatsApp');
+  const copySummaryBtn = document.getElementById('copySummary');
+  const activateBtn = document.getElementById('activateBtn');
+  const backupReceiptBtn = document.getElementById('backupReceiptBtn');
+
+  // Admin elements
+  const openAdminBtn = document.getElementById('openAdminBtn');
+  const openAdminLogin = document.getElementById('openAdminLogin');
+  const adminLoginModal = document.getElementById('adminLoginModal');
+  const adminEmail = document.getElementById('adminEmail');
+  const adminPassword = document.getElementById('adminPassword');
+  const adminLoginSubmit = document.getElementById('adminLoginSubmit');
+  const adminLoginClose = document.getElementById('adminLoginClose');
+  const adminLoginMsg = document.getElementById('adminLoginMsg');
+  const adminPanel = document.getElementById('adminPanel');
+  const closeAdmin = document.getElementById('closeAdmin');
+  const adminSignOut = document.getElementById('adminSignOut');
+
+  const newKeyEmail = document.getElementById('newKeyEmail');
+  const newKeyDuration = document.getElementById('newKeyDuration');
+  const generateKeyBtn = document.getElementById('generateKeyBtn');
+  const manualActivateBtn = document.getElementById('manualActivateBtn');
+  const adminKeysList = document.getElementById('adminKeysList');
+
+  const proModal = document.getElementById('proModal');
+  const licenseEmail = document.getElementById('licenseEmail');
+  const licenseKeyInput = document.getElementById('licenseKeyInput');
+  const modalActivateBtn = document.getElementById('modalActivateBtn');
+  const modalCloseBtn = document.getElementById('modalCloseBtn');
+  const activationMsg = document.getElementById('activationMsg');
+
+  const receiptListPreview = document.getElementById('receiptListPreview');
+  const searchReceipts = document.getElementById('searchReceipts');
+
+  const adminReceipts = document.getElementById('adminReceipts');
+  const adminLogs = document.getElementById('adminLogs');
+
+  // State
+  const LS_ACTIVE = 'sr_activeLicense_v2';
+  const LS_RECEIPT_COUNT = 'sr_receiptCount_v2';
+  const LS_USER_ID = 'sr_userId_v2';
+  const LS_QUEUE = 'sr_offlineQueue_v2';
+
+  let receiptCount = parseInt(localStorage.getItem(LS_RECEIPT_COUNT) || '0');
+  let isTrialActive = true;
+  let isProActive = false;
+  let currentUser = null;
+  let userId = localStorage.getItem(LS_USER_ID);
+  if (!userId) {
+    userId = 'user_' + Math.random().toString(36).slice(2,10);
+    localStorage.setItem(LS_USER_ID, userId);
+  }
+  userIdLabel.textContent = userId;
+
+  // Default date
+  dateEl.value = new Date().toISOString().slice(0,10);
+
+  // File previews
+  let logoDataURL = null;
+  let signatureDataURL = null;
+
+  function setupFilePreview(inputEl, previewEl, setDataFn){
+    inputEl.addEventListener('change', function(){
+      const file = this.files && this.files[0];
+      if(!file){ setDataFn(null); previewEl.textContent='No image uploaded'; return; }
+      const reader = new FileReader();
+      reader.onload = e => {
+        const url = e.target.result;
+        setDataFn(url);
+        previewEl.innerHTML = '';
+        const img = document.createElement('img'); img.src = url; previewEl.appendChild(img);
+        const rm = document.createElement('button'); rm.type='button'; rm.className='small'; rm.textContent='Remove';
+        rm.onclick = ()=>{ setDataFn(null); inputEl.value=''; previewEl.textContent='No image uploaded'; };
+        previewEl.appendChild(rm);
+      };
+      reader.readAsDataURL(file);
+    });
+  }
+
+  setupFilePreview(businessLogo, logoPreview, v => logoDataURL = v);
+  setupFilePreview(signatureUpload, signaturePreview, v => signatureDataURL = v);
+
+  // Arrears calc
+  function updateArrears(){
+    const total = parseFloat(totalAmountEl.value) || 0;
+    const paid = parseFloat(amountPaidEl.value) || 0;
+    const diff = total - paid;
+    arrearsEl.value = diff.toFixed(2);
+  }
+  totalAmountEl.addEventListener('input', updateArrears);
+  amountPaidEl.addEventListener('input', updateArrears);
+
+  // ----------------------- Utility: SHA-256 hashing -----------------------
+  async function sha256Hex(message){
+    const enc = new TextEncoder();
+    const data = enc.encode(message);
+    const hash = await crypto.subtle.digest('SHA-256', data);
+    const hex = Array.from(new Uint8Array(hash)).map(b => b.toString(16).padStart(2,'0')).join('');
+    return hex;
+  }
+
+  // ----------------------- Key generator safe -----------------------
+  function generateChunk(n=5){
+    const chars = "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789";
+    let out='';
+    for(let i=0;i<n;i++) out += chars[Math.floor(Math.random()*chars.length)];
+    return out;
+  }
+  function generateSRKeyPlain(){
+    return `SR-${generateChunk()}-${generateChunk()}-${generateChunk()}`;
+  }
+
+  // ----------------------- Offline Queue (localStorage) -----------------------
+  function queuePush(item){
+    const q = JSON.parse(localStorage.getItem(LS_QUEUE) || '[]');
+    q.push(item);
+    localStorage.setItem(LS_QUEUE, JSON.stringify(q));
+    queueStatus.textContent = 'queued';
+  }
+  async function flushQueue(){
+    const q = JSON.parse(localStorage.getItem(LS_QUEUE) || '[]');
+    if(!q.length){ queueStatus.textContent = 'idle'; return; }
+    queueStatus.textContent = 'syncing...';
+    for(const item of q.slice()){
+      try{
+        if(item.type === 'backupReceipt') {
+          await backupReceiptToCloud(item.payload, true);
+        }
+        // remove first item
+        const current = JSON.parse(localStorage.getItem(LS_QUEUE) || '[]');
+        current.shift();
+        localStorage.setItem(LS_QUEUE, JSON.stringify(current));
+      }catch(e){
+        console.error('Queue item failed, will retry later', e);
+        queueStatus.textContent = 'error — will retry';
+        return;
+      }
+    }
+    queueStatus.textContent = 'idle';
+  }
+  // attempt flush periodically
+  setInterval(()=>{ if(navigator.onLine) flushQueue(); }, 20000);
+  window.addEventListener('online', flushQueue);
+
+  // ----------------------- Receipt backup to Firestore + Storage -----------------------
+  async function uploadDataUrlToStorage(dataURL, path){
+    // dataURL like: data:image/png;base64,...
+    const res = await fetch(dataURL);
+    const blob = await res.blob();
+    const ref = storage.ref().child(path);
+    await ref.put(blob);
+    return await ref.getDownloadURL();
+  }
+
+  async function backupReceiptToCloud(data, fromQueue=false){
+    try{
+      // upload images if present
+      if(data.logoDataURL && data.logoDataURL.startsWith('data:')){
+        data.logoURL = await uploadDataUrlToStorage(data.logoDataURL, `logos/${userId}_${Date.now()}.png`);
+      }
+      if(data.signatureDataURL && data.signatureDataURL.startsWith('data:')){
+        data.signatureURL = await uploadDataUrlToStorage(data.signatureDataURL, `signatures/${userId}_${Date.now()}.png`);
+      }
+
+      data.userId = userId;
+      data.createdAt = firebase.firestore.FieldValue.serverTimestamp();
+      const docRef = await db.collection('receipts').add(data);
+
+      // track usage
+      receiptCount = (receiptCount||0) + 1;
+      localStorage.setItem(LS_RECEIPT_COUNT, receiptCount.toString());
+      await db.collection('receiptUsage').doc(userId).set({
+        receiptCount,
+        lastActivity: firebase.firestore.FieldValue.serverTimestamp()
+      }, {merge:true});
+
+      updateUsageUI();
+      logAdmin(`Receipt backed up: ${docRef.id}`);
+      return docRef.id;
+    }catch(err){
+      console.error('Backup failed', err);
+      if(!fromQueue) {
+        // push to queue for later
+        queuePush({type:'backupReceipt', payload:data});
+        logAdmin('Backup queued for retry');
+      }
+      throw err;
+    }
+  }
+
+  // ----------------------- PDF Generation -----------------------
+  async function generatePdfBlob(data){
+    if(!isProActive && !isTrialActive){
+      alert('Trial expired. Activate Pro to continue.');
+      return null;
+    }
+
+    // increment count for trial users
+    if(isTrialActive && !isProActive){
+      receiptCount = (receiptCount||0) + 1;
+      localStorage.setItem(LS_RECEIPT_COUNT, receiptCount.toString());
+      await db.collection('receiptUsage').doc(userId).set({
+        receiptCount,
+        lastActivity: firebase.firestore.FieldValue.serverTimestamp()
+      }, {merge:true});
+      updateUsageUI();
+      // re-check trial
+      if(receiptCount >= 1000000){} // placeholder, we manage limits elsewhere
+    }
+
+    const { jsPDF } = window.jspdf;
+    const doc = new jsPDF({unit:'pt', format:'a4'});
+    const width = doc.internal.pageSize.getWidth();
+
+    // header
+    doc.setFontSize(18);
+    doc.setFont('helvetica','bold');
+    doc.text(data.businessName || 'Business', 40, 50);
+
+    // logo if available (synchronous drawImage requires image element)
+    let y = 80;
+    if(data.logoDataURL){
+      try{
+        const img = new Image();
+        img.src = data.logoDataURL;
+        await new Promise((res,rej)=>{ img.onload = res; img.onerror = rej; });
+        doc.addImage(img, 'PNG', width-160, 30, 100, 40);
+      }catch(e){ console.warn('Logo draw failed', e); }
+    }
+
+    doc.setFontSize(12);
+    doc.setFont('helvetica','normal');
+    doc.text(`Payer: ${data.payerName}`, 40, y); y += 18;
+    doc.text(`Purpose: ${data.purpose || '-'}`, 40, y); y += 18;
+
+    // amounts table
+    doc.setFontSize(12);
+    doc.text('Amount Details', 40, y); y += 14;
+    doc.setDrawColor(200);
+    doc.rect(40, y, width-80, 80);
+    doc.text(`Total: GHS ${Number(data.totalAmount||0).toFixed(2)}`, 50, y+24);
+    doc.text(`Paid: GHS ${Number(data.amountPaid||0).toFixed(2)}`, 50, y+44);
+    doc.text(`Arrears: GHS ${Number(data.arrears||0).toFixed(2)}`, 50, y+64);
+    y += 100;
+
+    // signature
+    if(data.signatureDataURL){
+      try{
+        const sImg = new Image();
+        sImg.src = data.signatureDataURL;
+        await new Promise((res,rej)=>{ sImg.onload=res; sImg.onerror=rej; });
+        doc.addImage(sImg, 'PNG', width-220, y-20, 150, 50);
+      }catch(e){ console.warn('Signature draw failed', e); }
+    }
+
+    // footer
+    doc.setFontSize(10);
+    doc.setTextColor(150);
+    doc.text(`Generated by SmartReceipt Pro — ${new Date().toLocaleString()}`, 40, 770);
+
+    return doc.output('blob');
+  }
+
+  // Generate event
+  generateBtn.addEventListener('click', async ()=>{
+    const data = {
+      businessName: businessNameEl.value.trim(),
+      businessContact: businessContactEl.value.trim(),
+      businessEmail: businessEmailEl.value.trim(),
+      payerName: payerNameEl.value.trim(),
+      totalAmount: Number(totalAmountEl.value) || 0,
+      amountPaid: Number(amountPaidEl.value) || 0,
+      arrears: Number(arrearsEl.value) || 0,
+      date: dateEl.value || new Date().toISOString().slice(0,10),
+      purpose: purposeEl.value.trim(),
+      logoDataURL,
+      signatureDataURL
     };
-
-    // Initialize Firebase
-    if (!firebase.apps.length) {
-        firebase.initializeApp(firebaseConfig);
+    if(!data.businessName || !data.payerName){
+      return alert('Please enter Business and Payer names');
     }
-    const auth = firebase.auth();
-    const db = firebase.firestore();
+    previewStatus('Generating PDF...');
+    try{
+      const blob = await generatePdfBlob(data);
+      if(!blob) { previewStatus('Generation blocked'); return; }
+      if(window._lastPdf) URL.revokeObjectURL(window._lastPdf);
+      window._lastPdf = URL.createObjectURL(blob);
+      downloadBtn.disabled = false;
+      downloadBtn.onclick = ()=> {
+        const a = document.createElement('a');
+        a.href = window._lastPdf;
+        a.download = `receipt_${Date.now()}.pdf`;
+        a.click();
+      };
+      previewStatus(`✅ PDF ready — <a href="${window._lastPdf}" target="_blank">Open PDF</a>`);
+    }catch(e){
+      console.error(e);
+      previewStatus('Error generating PDF. See console.');
+    }
+  });
 
-    // Elements (main)
-    const appTitle = document.getElementById('appTitle');
-    const themeBtns = document.querySelectorAll('.theme-btn');
-    const statusBadge = document.getElementById('statusBadge');
+  function previewStatus(txt){ document.getElementById('preview').innerHTML = txt; }
 
-    // Activation modal
-    const proModalBackdrop = document.getElementById('proModalBackdrop');
-    const licenseEmail = document.getElementById('licenseEmail');
-    const licenseKeyInput = document.getElementById('licenseKeyInput');
-    const modalActivateBtn = document.getElementById('modalActivateBtn');
-    const modalCloseBtn = document.getElementById('modalCloseBtn');
-    const activationMsg = document.getElementById('activationMsg');
+  // WhatsApp share
+  shareWhatsAppBtn.addEventListener('click', ()=>{
+    const txt = `Receipt: ${businessNameEl.value}\nPayer: ${payerNameEl.value}\nTotal: GHS ${(Number(totalAmountEl.value)||0).toFixed(2)}\nPaid: GHS ${(Number(amountPaidEl.value)||0).toFixed(2)}\nArrears: GHS ${(Number(arrearsEl.value)||0).toFixed(2)}\nDate: ${dateEl.value}`;
+    const url = 'https://wa.me/?text=' + encodeURIComponent(txt);
+    window.open(url,'_blank');
+  });
 
-    // Admin login modal (email and password)
-    const adminLoginBackdrop = document.getElementById('adminLoginBackdrop');
-    const adminEmailInput = document.getElementById('adminEmailInput');
-    const adminPasswordInput = document.getElementById('adminPasswordInput');
-    const adminLoginSubmit = document.getElementById('adminLoginSubmit');
-    const adminLoginClose = document.getElementById('adminLoginClose');
-    const adminLoginMsg = document.getElementById('adminLoginMsg');
+  // Copy summary
+  copySummaryBtn.addEventListener('click', async ()=>{
+    const txt = `Receipt — ${businessNameEl.value} | ${payerNameEl.value} | Total: GHS ${(Number(totalAmountEl.value)||0).toFixed(2)} | Paid: GHS ${(Number(amountPaidEl.value)||0).toFixed(2)} | Arrears: GHS ${(Number(arrearsEl.value)||0).toFixed(2)} | Date: ${dateEl.value} | ${purposeEl.value}`;
+    try{ await navigator.clipboard.writeText(txt); alert('Summary copied'); }catch(e){ alert('Copy failed — select text manually:\n' + txt); }
+  });
 
-    const adminFullscreen = document.getElementById('adminFullscreen');
-    const adminKeysList = document.getElementById('adminKeysList');
-    const newKeyEmail = document.getElementById('newKeyEmail');
-    const newKeyDuration = document.getElementById('newKeyDuration');
-    const generateKeyBtn = document.getElementById('generateKeyBtn');
-    const closeAdminBtn = document.getElementById('closeAdminBtn');
-    const manualActivateBtn = document.getElementById('manualActivateBtn');
+  // Backup receipt to cloud
+  backupReceiptBtn.addEventListener('click', async ()=>{
+    const data = {
+      businessName: businessNameEl.value.trim(),
+      businessContact: businessContactEl.value.trim(),
+      businessEmail: businessEmailEl.value.trim(),
+      payerName: payerNameEl.value.trim(),
+      totalAmount: Number(totalAmountEl.value) || 0,
+      amountPaid: Number(amountPaidEl.value) || 0,
+      arrears: Number(arrearsEl.value) || 0,
+      date: dateEl.value || new Date().toISOString().slice(0,10),
+      purpose: purposeEl.value.trim(),
+      logoDataURL,
+      signatureDataURL
+    };
+    try{
+      if(!navigator.onLine){
+        queuePush({type:'backupReceipt', payload:data});
+        alert('You are offline — receipt queued to backup when online.');
+        return;
+      }
+      await backupReceiptToCloud(data);
+      alert('Receipt backed up to cloud.');
+    }catch(e){
+      alert('Backup failed (queued for retry).');
+    }
+  });
 
-    // Receipt form elements
-    const generateBtn = document.getElementById('generate');
-    const downloadBtn = document.getElementById('download');
-    const whatsappBtn = document.getElementById('whatsapp');
-    const copyBtn = document.getElementById('copySummary');
-    const preview = document.getElementById('preview');
-    const activateBtnUI = document.getElementById('activateBtnUI');
+  // ----------------------- Activation + License -----------------------
+  activateBtn.addEventListener('click', ()=>{ showProModal(); });
+  function showProModal(){ proModal.style.display='flex'; licenseEmail.value=''; licenseKeyInput.value=''; activationMsg.textContent=''; licenseEmail.focus(); }
+  function hideProModal(){ proModal.style.display='none'; }
 
-    const businessNameEl = document.getElementById('businessName');
-    const businessContactEl = document.getElementById('businessContact');
-    const businessEmailEl = document.getElementById('businessEmail');
-    const payerNameEl = document.getElementById('payerName');
-    const totalAmountEl = document.getElementById('totalAmount');
-    const amountPaidEl = document.getElementById('amountPaid');
-    const arrearsEl = document.getElementById('arrears');
-    const dateEl = document.getElementById('date');
-    const purposeEl = document.getElementById('purpose');
-    const businessLogo = document.getElementById('businessLogo');
-    const logoPreview = document.getElementById('logoPreview');
-    const signatureUpload = document.getElementById('signatureUpload');
-    const signaturePreview = document.getElementById('signaturePreview');
+  modalCloseBtn.addEventListener('click', hideProModal);
 
-    // State & storage keys
-    const LS_ACTIVE = "sr_activeLicense";
-    const LS_RECEIPT_COUNT = "sr_receiptCount";
-    const LS_USER_ID = "sr_userId";
+  async function validateActivationKey(email, keyPlain){
+    // We look for hashed stored key that matches sha256(keyPlain)
+    const keyHash = await sha256Hex(keyPlain.trim().toUpperCase());
+    const q = await db.collection('activationKeys').where('keyHash','==',keyHash).limit(1).get();
+    if(q.empty) return {valid:false, message:'Invalid key'};
+    const doc = q.docs[0];
+    const data = doc.data();
+    // check email match (admin stored email should be lowercase)
+    if(data.email && data.email !== email.trim().toLowerCase()) return {valid:false, message:'Key not assigned to this email'};
+    // check status/expires
+    if(data.status === 'revoked') return {valid:false, message:'Key revoked'};
+    if(data.expiresAt && data.expiresAt.toDate && data.expiresAt.toDate() < new Date()) return {valid:false, message:'Key expired'};
+    return {valid:true, docId: doc.id, data};
+  }
 
-    // Track receipt usage
-    let receiptCount = parseInt(localStorage.getItem(LS_RECEIPT_COUNT) || '0');
-    let isTrialActive = true;
-    let isProActive = false;
-    let userId = localStorage.getItem(LS_USER_ID);
+  async function activateKeyForUser(email,keyPlain){
+    activationMsg.textContent = 'Validating…';
+    try{
+      const res = await validateActivationKey(email,keyPlain);
+      if(!res.valid){ activationMsg.style.color='var(--danger)'; activationMsg.textContent = res.message; return false; }
+      // mark activated in DB
+      const now = new Date();
+      const expiresAt = new Date(now.getTime() + (res.data.durationDays||30)*24*3600*1000);
+      await db.collection('activationKeys').doc(res.docId).update({
+        activatedAt: firebase.firestore.FieldValue.serverTimestamp(),
+        expiresAt: firebase.firestore.Timestamp.fromDate(expiresAt),
+        status: 'activated'
+      });
+      // store locally
+      const licenseData = {
+        keyHash: await sha256Hex(keyPlain.trim().toUpperCase()),
+        email: email.toLowerCase(),
+        activatedAt: now.toISOString(),
+        expiresAt: expiresAt.toISOString(),
+        durationDays: res.data.durationDays || 30
+      };
+      localStorage.setItem(LS_ACTIVE, JSON.stringify(licenseData));
+      activationMsg.style.color = 'var(--success)';
+      activationMsg.textContent = 'Activated successfully!';
+      await updateUserProStatus(licenseData);
+      setTimeout(()=>{ hideProModal(); checkActivationStatus(); }, 900);
+      return true;
+    }catch(e){
+      console.error(e);
+      activationMsg.style.color='var(--danger)';
+      activationMsg.textContent = 'Activation error';
+      return false;
+    }
+  }
+  modalActivateBtn.addEventListener('click', async ()=> {
+    const email = (licenseEmail.value||'').trim().toLowerCase();
+    const key = (licenseKeyInput.value||'').trim();
+    if(!email||!key){ activationMsg.style.color='var(--danger)'; activationMsg.textContent='Enter email & key'; return; }
+    await activateKeyForUser(email,key);
+  });
 
-    // Generate unique user ID if not exists
-    if (!userId) {
-        userId = 'user_' + Math.random().toString(36).substr(2, 9);
-        localStorage.setItem(LS_USER_ID, userId);
+  async function updateUserProStatus(licenseData){
+    try{
+      await db.collection('receiptUsage').doc(userId).set({
+        proActivation: licenseData,
+        isTrialActive: false,
+        lastUpdated: firebase.firestore.FieldValue.serverTimestamp()
+      }, {merge:true});
+      logAdmin(`User ${userId} activated pro (email:${licenseData.email})`);
+    }catch(e){ console.error('updateUserProStatus',e); }
+  }
+
+  // ----------------------- Admin flows -----------------------
+  // Admin login modal toggles
+  openAdminLogin.addEventListener('click', ()=>{ adminLoginModal.style.display='flex'; adminEmail.value=''; adminPassword.value=''; adminLoginMsg.textContent=''; adminEmail.focus(); });
+  adminLoginClose.addEventListener('click', ()=>{ adminLoginModal.style.display='none'; });
+
+  async function handleAdminLogin(email,password){
+    try{
+      const cred = await auth.signInWithEmailAndPassword(email,password);
+      const user = cred.user;
+      const idToken = await user.getIdTokenResult();
+      if(!idToken.claims.admin){
+        await auth.signOut();
+        adminLoginMsg.style.color='var(--danger)';
+        adminLoginMsg.textContent = 'Access denied — not an admin';
+        return;
+      }
+      adminLoginModal.style.display='none';
+      openAdminPanel();
+    }catch(e){
+      console.error(e);
+      adminLoginMsg.style.color='var(--danger)';
+      adminLoginMsg.textContent = 'Login failed';
+    }
+  }
+
+  adminLoginSubmit.addEventListener('click', ()=> {
+    const e = (adminEmail.value||'').trim();
+    const p = (adminPassword.value||'').trim();
+    if(!e||!p){ adminLoginMsg.style.color='var(--danger)'; adminLoginMsg.textContent='Enter email & password'; return; }
+    handleAdminLogin(e,p);
+  });
+
+  // Admin full panel
+  function openAdminPanel(){ adminPanel.style.display='block'; loadAdminKeys(); loadRecentReceipts(); loadLogs(); }
+  closeAdmin.addEventListener('click', ()=>{ adminPanel.style.display='none'; });
+  adminSignOut.addEventListener('click', ()=>{ auth.signOut(); adminPanel.style.display='none'; alert('Admin signed out'); });
+
+  // Generate key (admin client-side hashing) - NOTE: For best security generate on server
+  generateKeyBtn.addEventListener('click', async ()=>{
+    const email = (newKeyEmail.value||'').trim().toLowerCase();
+    const durationDays = Number(newKeyDuration.value||30);
+    if(!email){ alert('Enter email'); return; }
+    // generate plain key (send to user once), store hash in db
+    const plain = generateSRKeyPlain();
+    const hash = await sha256Hex(plain.toUpperCase());
+    const now = new Date();
+    const expiresAt = new Date(now.getTime() + durationDays*24*3600*1000);
+    try{
+      await db.collection('activationKeys').add({
+        email,
+        keyHash: hash,
+        durationDays,
+        createdAt: firebase.firestore.FieldValue.serverTimestamp(),
+        activatedAt: null,
+        expiresAt: firebase.firestore.Timestamp.fromDate(expiresAt),
+        status: 'active',
+        createdBy: auth.currentUser ? auth.currentUser.uid : 'client'
+      });
+      alert(`Key generated for ${email}\nPlaintext key (SHOW TO USER):\n${plain}\n(Keep this safe; only hash is stored in DB)`);
+      newKeyEmail.value='';
+      loadAdminKeys();
+      logAdmin(`Key created for ${email}`);
+    }catch(e){
+      console.error(e); alert('Key creation failed');
+    }
+  });
+
+  // Manual activate (admin)
+  manualActivateBtn.addEventListener('click', async ()=>{
+    const email = (newKeyEmail.value||'').trim().toLowerCase();
+    if(!email){ alert('Enter email'); return; }
+    const durationDays = Number(newKeyDuration.value||30);
+    const plain = generateSRKeyPlain();
+    const hash = await sha256Hex(plain.toUpperCase());
+    const now = new Date();
+    const expiresAt = new Date(now.getTime() + durationDays*24*3600*1000);
+    try{
+      await db.collection('activationKeys').add({
+        email,
+        keyHash: hash,
+        durationDays,
+        createdAt: firebase.firestore.FieldValue.serverTimestamp(),
+        activatedAt: firebase.firestore.FieldValue.serverTimestamp(),
+        expiresAt: firebase.firestore.Timestamp.fromDate(expiresAt),
+        status: 'activated',
+        createdBy: auth.currentUser ? auth.currentUser.uid : 'client'
+      });
+      alert(`Pre-activated license for ${email}\nKey (plaintext): ${plain}`);
+      newKeyEmail.value='';
+      loadAdminKeys();
+      logAdmin(`Manual activated key for ${email}`);
+    }catch(e){ console.error(e); alert('Manual activation failed'); }
+  });
+
+  // Load admin keys
+  async function loadAdminKeys(){
+    try{
+      const snapshot = await db.collection('activationKeys').orderBy('createdAt','desc').limit(200).get();
+      adminKeysList.innerHTML = '';
+      snapshot.forEach(doc=>{
+        const d = doc.data();
+        const tr = document.createElement('tr');
+        const activated = d.activatedAt ? (d.activatedAt.toDate ? d.activatedAt.toDate().toLocaleString() : '-') : '-';
+        const expires = d.expiresAt ? (d.expiresAt.toDate ? d.expiresAt.toDate().toLocaleString() : '-') : '-';
+        tr.innerHTML = `<td>${escapeHtml(d.email||'(none)')}</td><td style="word-break:break-all">${escapeHtml(d.keyHash||'')}</td><td>${d.durationDays||0}d</td><td>${escapeHtml(activated)}</td><td>${escapeHtml(expires)}</td><td><button data-id="${doc.id}" class="revokeBtn">Revoke</button> <button data-id="${doc.id}" class="delBtn">Delete</button></td>`;
+        adminKeysList.appendChild(tr);
+      });
+      // attach handlers
+      document.querySelectorAll('.revokeBtn').forEach(b=> b.onclick = async ()=> {
+        if(!confirm('Revoke key?')) return;
+        const id = b.getAttribute('data-id');
+        await db.collection('activationKeys').doc(id).update({status:'revoked'});
+        loadAdminKeys();
+        logAdmin(`Key ${id} revoked`);
+      });
+      document.querySelectorAll('.delBtn').forEach(b=> b.onclick = async ()=> {
+        if(!confirm('Delete key permanently?')) return;
+        const id = b.getAttribute('data-id');
+        await db.collection('activationKeys').doc(id).delete();
+        loadAdminKeys();
+        logAdmin(`Key ${id} deleted`);
+      });
+    }catch(e){ console.error(e); }
+  }
+
+  // Load recent receipts for admin
+  async function loadRecentReceipts(){
+    try{
+      const snap = await db.collection('receipts').orderBy('createdAt','desc').limit(50).get();
+      adminReceipts.innerHTML = '';
+      snap.forEach(doc=>{
+        const d = doc.data();
+        const el = document.createElement('div');
+        el.className = 'small muted';
+        el.style.padding='6px';
+        el.innerHTML = `<strong>${escapeHtml(d.payerName||'(no payer)')}</strong> — ${escapeHtml(d.businessName||'(no business)')} — ${d.totalAmount||0} GHS — ${d.date||''}`;
+        adminReceipts.appendChild(el);
+      });
+    }catch(e){ console.error(e); }
+  }
+
+  // Simple admin logs store in Firestore (admin-only in rules)
+  async function logAdmin(msg){
+    try{
+      await db.collection('adminLogs').add({
+        message: msg,
+        userId,
+        ts: firebase.firestore.FieldValue.serverTimestamp()
+      });
+    }catch(e){ console.error('logAdmin',e); }
+  }
+  async function loadLogs(){
+    try{
+      const snap = await db.collection('adminLogs').orderBy('ts','desc').limit(200).get();
+      adminLogs.innerHTML = '';
+      snap.forEach(doc=>{
+        const d=doc.data();
+        const el = document.createElement('div');
+        el.className='small muted';
+        el.style.padding='6px';
+        el.innerHTML = `${d.ts && d.ts.toDate ? d.ts.toDate().toLocaleString() : ''} — ${escapeHtml(d.message||'')}`;
+        adminLogs.appendChild(el);
+      });
+    }catch(e){ console.error(e); }
+  }
+
+  // ----------------------- Activation check -----------------------
+  async function checkActivationStatus(){
+    const active = JSON.parse(localStorage.getItem(LS_ACTIVE) || 'null');
+    if(active){
+      const expiresAt = new Date(active.expiresAt);
+      if(new Date() < expiresAt){
+        isProActive = true; isTrialActive = false;
+        proPanel.style.display = 'block';
+        proInfo.textContent = `Pro — ${active.email} (${Math.ceil((expiresAt - Date.now())/(24*3600*1000))}d left)`;
+        proNote.textContent = `Expires ${expiresAt.toDateString()}`;
+        return;
+      } else {
+        localStorage.removeItem(LS_ACTIVE);
+      }
     }
 
-    // Default date to today
-    dateEl.value = new Date().toISOString().slice(0,10);
-
-    // Initialize app
-    initializeApp();
-
-    async function initializeApp() {
-        await checkActivationStatus();
-        await syncReceiptCountWithFirebase();
-        await trackUserActivity();
+    // fallback: check receiptUsage for trial
+    try{
+      const usageDoc = await db.collection('receiptUsage').doc(userId).get();
+      if(usageDoc.exists){
+        const d = usageDoc.data();
+        receiptCount = d.receiptCount || receiptCount;
+        localStorage.setItem(LS_RECEIPT_COUNT, String(receiptCount));
+        isTrialActive = (receiptCount < 3); // example low-limit; you can change to any policy
+        isProActive = false;
+      }else{
+        isTrialActive = true;
+      }
+    }catch(e){
+      isTrialActive = (receiptCount < 3);
     }
+    updateUsageUI();
+  }
 
-    // Theme switcher
-    function setTheme(theme){
-        themeBtns.forEach(b => b.classList.remove('active'));
-        if(theme === 'green'){
-            document.getElementById('themeGreen').classList.add('active');
-            document.documentElement.style.setProperty('--grad1', '#059669');
-            document.documentElement.style.setProperty('--grad2', '#10b981');
-            document.documentElement.style.setProperty('--grad3', '#06b6d4');
-        } else if(theme === 'gold'){
-            document.getElementById('themeGold').classList.add('active');
-            document.documentElement.style.setProperty('--grad1', '#d97706');
-            document.documentElement.style.setProperty('--grad2', '#f59e0b');
-            document.documentElement.style.setProperty('--grad3', '#eab308');
-        } else {
-            document.getElementById('themeBlue').classList.add('active');
-            document.documentElement.style.setProperty('--grad1', '#4f46e5');
-            document.documentElement.style.setProperty('--grad2', '#0ea5e9');
-            document.documentElement.style.setProperty('--grad3', '#3b82f6');
+  function updateUsageUI(){
+    receiptCountLabel.textContent = receiptCount;
+    const remaining = Math.max(0, 3 - (receiptCount||0));
+    statusBadge.textContent = isProActive ? 'Pro Active' : (isTrialActive ? `Trial — ${remaining} receipts left` : 'Trial Expired');
+    if(isProActive) proPanel.style.display='block';
+    else proPanel.style.display = isTrialActive ? 'none' : 'none';
+  }
+
+  // ----------------------- Small helpers -----------------------
+  function escapeHtml(s){
+    if(s == null) return '';
+    return String(s).replace(/[&<>"']/g, m => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[m]));
+  }
+
+  // ----------------------- Search receipts preview -----------------------
+  searchReceipts.addEventListener('input', async ()=>{
+    const q = (searchReceipts.value||'').trim().toLowerCase();
+    receiptListPreview.innerHTML = 'Searching...';
+    try{
+      let snap;
+      if(!q){ snap = await db.collection('receipts').orderBy('createdAt','desc').limit(10).get(); }
+      else {
+        // naive search: business or payer starting with q (requires index for large data)
+        snap = await db.collection('receipts').orderBy('createdAt','desc').limit(50).get();
+      }
+      receiptListPreview.innerHTML = '';
+      snap.forEach(doc=>{
+        const d = doc.data();
+        const t = document.createElement('div');
+        t.className='small muted';
+        t.style.padding='6px';
+        if(!q || (d.payerName && d.payerName.toLowerCase().includes(q)) || (d.businessName && d.businessName.toLowerCase().includes(q))){
+          t.innerHTML = `<strong>${escapeHtml(d.payerName||'(no payer)')}</strong> — ${escapeHtml(d.businessName||'(no business)')} — GHS ${Number(d.totalAmount||0).toFixed(2)}`;
+          receiptListPreview.appendChild(t);
         }
+      });
+      if(!receiptListPreview.innerHTML) receiptListPreview.innerHTML = '<div class="small muted">No receipts</div>';
+    }catch(e){ receiptListPreview.innerHTML = '<div class="small muted">Search failed</div>'; console.error(e); }
+  });
+
+  // ----------------------- Admin UI trigger - triple click on title -----------------------
+  let clickCount=0, clickTimer=null;
+  appTitle.addEventListener('click', ()=>{
+    clickCount++;
+    if(clickTimer) clearTimeout(clickTimer);
+    clickTimer = setTimeout(()=> clickCount=0, 700);
+    if(clickCount >= 3){ clickCount=0; adminLoginModal.style.display='flex'; }
+  });
+  openAdminBtn.addEventListener('click', ()=> adminLoginModal.style.display='flex');
+
+  // ----------------------- Auth state listener -----------------------
+  auth.onAuthStateChanged(async (u)=>{
+    currentUser = u;
+    if(u){
+      // check claims
+      const idToken = await u.getIdTokenResult();
+      if(idToken.claims.admin){
+        // admin
+        statusBadge.textContent = 'Admin signed in';
+      }else{
+        statusBadge.textContent = 'User signed in';
+      }
+    }else{
+      statusBadge.textContent = 'Not signed in';
     }
-    themeBtns.forEach(btn => btn.addEventListener('click', ()=> setTheme(btn.dataset.theme)));
-    setTheme('blue');
+  });
 
-    // File preview helper
-    function setupFilePreview(inputEl, previewEl, setDataFn, opt = {maxWidth:140}) {
-        inputEl.addEventListener('change', function(){
-            const file = this.files && this.files[0];
-            if(!file){ setDataFn(null); previewEl.textContent = 'No image uploaded'; return; }
-            const reader = new FileReader();
-            reader.onload = e => {
-                const dataURL = e.target.result;
-                setDataFn(dataURL);
-                previewEl.innerHTML = '';
-                const img = document.createElement('img');
-                img.src = dataURL;
-                img.alt = 'Preview';
-                img.style.maxWidth = (opt.maxWidth || 140) + 'px';
-                previewEl.appendChild(img);
+  // ----------------------- Admin login sign-in/out -----------------------
+  adminLoginSubmit.addEventListener('click', async ()=>{
+    const e = (document.getElementById('adminEmail').value||'').trim();
+    const p = (document.getElementById('adminPassword').value||'').trim();
+    if(!e||!p){ adminLoginMsg.style.color='var(--danger)'; adminLoginMsg.textContent='Enter email & password'; return; }
+    try{
+      await handleAdminLogin(e,p);
+    }catch(err){ console.error(err); adminLoginMsg.style.color='var(--danger)'; adminLoginMsg.textContent='Login failed'; }
+  });
 
-                const removeBtn = document.createElement('button');
-                removeBtn.type = 'button';
-                removeBtn.className = 'remove-btn';
-                removeBtn.innerText = 'Remove';
-                removeBtn.onclick = ()=>{
-                    setDataFn(null);
-                    inputEl.value = '';
-                    previewEl.textContent = 'No image uploaded';
-                };
-                previewEl.appendChild(removeBtn);
-            };
-            reader.readAsDataURL(file);
-        });
-    }
-
-    let logoDataURL = null;
-    let signatureDataURL = null;
-    setupFilePreview(businessLogo, logoPreview, v => logoDataURL = v, {maxWidth:140});
-    setupFilePreview(signatureUpload, signaturePreview, v => signatureDataURL = v, {maxWidth:160});
-
-    // Arrears auto-calc: arrears = total - paid
-    function updateArrears(){
-        const total = parseFloat(totalAmountEl.value) || 0;
-        const paid = parseFloat(amountPaidEl.value) || 0;
-        const diff = (total - paid);
-        arrearsEl.value = diff.toFixed(2);
-    }
-    totalAmountEl.addEventListener('input', updateArrears);
-    amountPaidEl.addEventListener('input', updateArrears);
-
-    // Generate SR-XXXX-XXXX-XXXX
-    function generateSRKey() {
-        const chunk = () => Math.random().toString(36).substr(2,5).toUpperCase().replace(/[^A-Z0-9]/g,'A').padEnd(5,'A');
-        return `SR-${chunk()}-${chunk()}-${chunk()}`;
-    }
-
-    // ==================== FIREBASE RECEIPT USAGE TRACKING ====================
-
-    // Enhanced receipt usage tracking
-    async function syncReceiptCountWithFirebase() {
-        try {
-            const usageDoc = await db.collection('receiptUsage').doc(userId).get();
-            
-            if (usageDoc.exists) {
-                const data = usageDoc.data();
-                receiptCount = data.receiptCount || 0;
-                localStorage.setItem(LS_RECEIPT_COUNT, receiptCount.toString());
-                
-                console.log('Synced receipt count from Firebase:', receiptCount);
-            } else {
-                // Create initial document for new user
-                await initializeUserInFirebase();
-            }
-        } catch (error) {
-            console.log('Using local receipt count:', error);
-            // Fallback to local storage
-            receiptCount = parseInt(localStorage.getItem(LS_RECEIPT_COUNT) || '0');
-        }
-    }
-
-    // Initialize new user in Firebase
-    async function initializeUserInFirebase() {
-        try {
-            const userData = {
-                userId: userId,
-                receiptCount: 0,
-                isTrialActive: true,
-                lastUpdated: firebase.firestore.FieldValue.serverTimestamp(),
-                createdAt: firebase.firestore.FieldValue.serverTimestamp(),
-                lastLogin: firebase.firestore.FieldValue.serverTimestamp(),
-                userAgent: navigator.userAgent,
-                proActivation: null
-            };
-            
-            await db.collection('receiptUsage').doc(userId).set(userData);
-            console.log('New user initialized in Firebase');
-        } catch (error) {
-            console.error('Error initializing user in Firebase:', error);
-        }
-    }
-
-    // Update receipt count in Firebase
-    async function updateReceiptCountInFirebase() {
-        try {
-            const updateData = {
-                receiptCount: receiptCount,
-                lastUpdated: firebase.firestore.FieldValue.serverTimestamp(),
-                isTrialActive: isTrialActive,
-                lastActivity: firebase.firestore.FieldValue.serverTimestamp()
-            };
-            
-            // Add pro activation data if user activates pro
-            if (isProActive) {
-                const activeLicense = JSON.parse(localStorage.getItem(LS_ACTIVE) || 'null');
-                if (activeLicense) {
-                    updateData.proActivation = {
-                        key: activeLicense.key,
-                        email: activeLicense.email,
-                        activatedAt: activeLicense.activatedAt,
-                        expiresAt: activeLicense.expiresAt,
-                        durationDays: activeLicense.durationDays
-                    };
-                    updateData.isTrialActive = false;
-                }
-            }
-            
-            await db.collection('receiptUsage').doc(userId).set(updateData, { merge: true });
-            console.log('Receipt count updated in Firebase:', receiptCount);
-        } catch (error) {
-            console.error('Error updating receipt count in Firebase:', error);
-        }
-    }
-
-    // Track user login/activity
-    async function trackUserActivity() {
-        try {
-            const activityData = {
-                lastLogin: firebase.firestore.FieldValue.serverTimestamp(),
-                userAgent: navigator.userAgent,
-                screenResolution: `${screen.width}x${screen.height}`,
-                language: navigator.language,
-                platform: navigator.platform
-            };
-            
-            await db.collection('receiptUsage').doc(userId).set(activityData, { merge: true });
-        } catch (error) {
-            console.error('Error tracking user activity:', error);
-        }
-    }
-
-    // ==================== ACTIVATION & LICENSE MANAGEMENT ====================
-
-    // Enhanced activation status check
-    async function checkActivationStatus() {
-        // First check local storage
-        const activeLicense = JSON.parse(localStorage.getItem(LS_ACTIVE) || 'null');
-        
-        if (activeLicense) {
-            // Check if license is still valid
-            const now = new Date();
-            const expiresAt = new Date(activeLicense.expiresAt);
-            
-            if (now < expiresAt) {
-                isProActive = true;
-                isTrialActive = false;
-                updateStatusBadge(activeLicense);
-                enableProFeatures();
-                
-                // Sync with Firebase
-                await updateUserProStatus(activeLicense);
-                return;
-            } else {
-                // License expired
-                localStorage.removeItem(LS_ACTIVE);
-                isProActive = false;
-                await updateReceiptCountInFirebase(); // Update Firebase
-            }
-        }
-
-        // Check trial status from Firebase
-        try {
-            const usageDoc = await db.collection('receiptUsage').doc(userId).get();
-            if (usageDoc.exists) {
-                const data = usageDoc.data();
-                receiptCount = data.receiptCount || 0;
-                
-                if (receiptCount >= 3) {
-                    isTrialActive = false;
-                    disableFeatures();
-                } else {
-                    isTrialActive = true;
-                }
-            }
-        } catch (error) {
-            // Fallback to local check
-            if (receiptCount >= 3) {
-                isTrialActive = false;
-                disableFeatures();
-            } else {
-                isTrialActive = true;
-            }
-        }
-        
-        updateStatusBadge();
-    }
-
-    function updateStatusBadge(license = null) {
-        if (license) {
-            const daysLeft = Math.ceil((new Date(license.expiresAt).getTime() - Date.now()) / (24 * 3600 * 1000));
-            statusBadge.textContent = `🔓 Pro — ${license.email} (${daysLeft} day${daysLeft !== 1 ? 's' : ''} left)`;
-            statusBadge.style.background = 'rgba(34, 197, 94, 0.3)';
-        } else if (!isTrialActive) {
-            statusBadge.textContent = '🔒 Trial Expired - Activate Pro';
-            statusBadge.style.background = 'rgba(239, 68, 68, 0.3)';
-        } else {
-            const remaining = 3 - receiptCount;
-            statusBadge.textContent = `🔓 Trial - ${remaining} receipt${remaining !== 1 ? 's' : ''} left`;
-            statusBadge.style.background = 'rgba(255, 255, 255, 0.06)';
-        }
-    }
-
-    function enableProFeatures() {
-        generateBtn.disabled = false;
-        generateBtn.style.opacity = '1';
-        activateBtnUI.style.display = 'none';
-    }
-
-    function disableFeatures() {
-        generateBtn.disabled = true;
-        generateBtn.style.opacity = '0.5';
-        activateBtnUI.style.display = 'block';
-    }
-
-    // Update user's pro status in Firestore
-    async function updateUserProStatus(licenseData) {
-        try {
-            const proData = {
-                proActivation: {
-                    key: licenseData.key,
-                    email: licenseData.email,
-                    activatedAt: licenseData.activatedAt,
-                    expiresAt: licenseData.expiresAt,
-                    durationDays: licenseData.durationDays
-                },
-                isTrialActive: false,
-                lastUpdated: firebase.firestore.FieldValue.serverTimestamp(),
-                proActivatedAt: firebase.firestore.FieldValue.serverTimestamp()
-            };
-            
-            await db.collection('receiptUsage').doc(userId).set(proData, { merge: true });
-            console.log('User pro status updated in Firebase');
-        } catch (error) {
-            console.error('Error updating user pro status:', error);
-        }
-    }
-
-    // ==================== ADMIN PANEL FUNCTIONS ====================
-
-    // Admin list rendering - dynamic
-    async function renderAdminKeys(){
-        if (!auth.currentUser) return;
-
-        try {
-            const snapshot = await db.collection('activationKeys')
-                .orderBy('createdAt', 'desc')
-                .get();
-            
-            adminKeysList.innerHTML = '';
-            
-            if(snapshot.empty){
-                adminKeysList.innerHTML = '<tr><td colspan="6" style="color:rgba(255,255,255,0.6);padding:12px">No keys yet</td></tr>';
-                return;
-            }
-
-            snapshot.docs.forEach(doc => {
-                const rec = doc.data();
-                const activated = rec.activatedAt ? (new Date(rec.activatedAt.seconds * 1000)).toLocaleString() : '-';
-                const expires = rec.expiresAt ? (new Date(rec.expiresAt.seconds * 1000)).toLocaleString() : '-';
-                const tr = document.createElement('tr');
-                tr.innerHTML = `
-                    <td style="padding:8px;max-width:180px;word-break:break-word">${escapeHtml(rec.email || '(no email)')}</td>
-                    <td style="padding:8px;max-width:220px;word-break:break-all">${escapeHtml(rec.key)}</td>
-                    <td style="padding:8px">${rec.durationDays}d</td>
-                    <td style="padding:8px">${escapeHtml(activated)}</td>
-                    <td style="padding:8px">${escapeHtml(expires)}</td>
-                    <td style="padding:8px;white-space:nowrap">
-                        <button data-key="${rec.key}" class="copyKey" style="margin-right:6px">Copy</button>
-                        <button data-id="${doc.id}" class="deleteKey" style="background:#ef4444;color:#fff;border:none;padding:6px 8px;border-radius:6px">Delete</button>
-                    </td>
-                `;
-                adminKeysList.appendChild(tr);
-            });
-
-            // attach handlers
-            document.querySelectorAll('.copyKey').forEach(btn => {
-                btn.onclick = () => {
-                    const key = btn.getAttribute('data-key');
-                    navigator.clipboard.writeText(key).then(()=> alert('Key copied to clipboard')).catch(()=> alert('Copy failed'));
-                };
-            });
-            document.querySelectorAll('.deleteKey').forEach(btn => {
-                btn.onclick = async () => {
-                    if(!confirm('Delete this key?')) return;
-                    const id = btn.getAttribute('data-id');
-                    try {
-                        await db.collection('activationKeys').doc(id).delete();
-                        renderAdminKeys();
-                        alert('Key deleted successfully');
-                    } catch (error) {
-                        alert('Error deleting key: ' + error.message);
-                    }
-                };
-            });
-        } catch (error) {
-            console.error('Error loading keys:', error);
-            adminKeysList.innerHTML = '<tr><td colspan="6" style="color:#ef4444;padding:12px">Error loading keys</td></tr>';
-        }
-    }
-
-    // Generate key (admin)
-    generateKeyBtn.addEventListener('click', async ()=>{
-        if (!auth.currentUser) {
-            alert('Please log in as admin first');
-            return;
-        }
-
-        const email = (newKeyEmail.value || '').trim().toLowerCase();
-        const durationDays = Number(newKeyDuration.value || 30);
-        if(!email){ alert('Please enter an email to assign the key to.'); return; }
-        if(![15,30,60].includes(durationDays)){ alert('Invalid duration. Use 15, 30, or 60 days.'); return; }
-        
-        const key = generateSRKey();
-        const now = new Date();
-        
-        try {
-            await db.collection('activationKeys').add({
-                key: key,
-                email: email,
-                durationDays: durationDays,
-                createdAt: firebase.firestore.FieldValue.serverTimestamp(),
-                activatedAt: null,
-                expiresAt: null,
-                createdBy: auth.currentUser.uid,
-                status: 'active'
-            });
-            
-            newKeyEmail.value = '';
-            renderAdminKeys();
-            alert(`✅ Activation key created for ${email}\nKey: ${key}\nDuration: ${durationDays} days`);
-        } catch (error) {
-            console.error('Error creating key:', error);
-            alert('❌ Error creating key: ' + error.message);
-        }
+  // ----------------------- Misc: open/close admin panel -----------------------
+  function handleAdminLogin(email,password){
+    return new Promise(async (resolve,reject)=>{
+      try{
+        const cred = await auth.signInWithEmailAndPassword(email,password);
+        const token = await cred.user.getIdTokenResult();
+        if(!token.claims.admin){ await auth.signOut(); adminLoginMsg.style.color='var(--danger)'; adminLoginMsg.textContent='Access denied'; reject('not admin'); return; }
+        adminLoginModal.style.display='none';
+        openAdminPanel();
+        resolve();
+      }catch(e){ reject(e); }
     });
+  }
 
-    // Manual activate (admin) - pre-activated license for specific email
-    manualActivateBtn.addEventListener('click', async ()=>{
-        if (!auth.currentUser) {
-            alert('Please log in as admin first');
-            return;
-        }
-
-        const email = (newKeyEmail.value || '').trim().toLowerCase();
-        if(!email){ alert('Enter email to pre-activate'); return; }
-        
-        const durationDays = Number(newKeyDuration.value || 30);
-        const key = generateSRKey();
-        const now = new Date();
-        const expiresAt = new Date(now.getTime() + durationDays * 24 * 3600 * 1000);
-
-        try {
-            await db.collection('activationKeys').add({
-                key: key,
-                email: email,
-                durationDays: durationDays,
-                createdAt: firebase.firestore.FieldValue.serverTimestamp(),
-                activatedAt: firebase.firestore.FieldValue.serverTimestamp(),
-                expiresAt: firebase.firestore.Timestamp.fromDate(expiresAt),
-                createdBy: auth.currentUser.uid,
-                status: 'activated'
-            });
-            
-            newKeyEmail.value = '';
-            renderAdminKeys();
-            alert(`✅ Pre-activated license for ${email}\nKey: ${key}\nDuration: ${durationDays} days`);
-        } catch (error) {
-            alert('❌ Error activating license: ' + error.message);
-        }
-    });
-
-    // ==================== ACTIVATION MODAL LOGIC ====================
-
-    // Activation modal logic
-    function showProModal(){ 
-        proModalBackdrop.classList.add('show'); 
-        proModalBackdrop.setAttribute('aria-hidden','false'); 
-        activationMsg.textContent=''; 
-        licenseEmail.value=''; 
-        licenseKeyInput.value=''; 
-        licenseEmail.focus(); 
+  // ----------------------- Initial sync & housekeeping -----------------------
+  async function init(){
+    // load usage count
+    receiptCount = parseInt(localStorage.getItem(LS_RECEIPT_COUNT) || '0');
+    const active = JSON.parse(localStorage.getItem(LS_ACTIVE) || 'null');
+    if(active && new Date(active.expiresAt) > new Date()){
+      isProActive = true;
     }
-    
-    function hideProModal(){ 
-        proModalBackdrop.classList.remove('show'); 
-        proModalBackdrop.setAttribute('aria-hidden','true'); 
-        activationMsg.textContent=''; 
-    }
+    updateUsageUI();
+    await checkActivationStatus();
+    await flushQueue();
+    logAdmin('App initialized');
+  }
+  init();
 
-    activateBtnUI.addEventListener('click', showProModal);
-    modalCloseBtn.addEventListener('click', hideProModal);
+  // small helper UI toggles
+  document.getElementById('download').addEventListener('click', ()=> {
+    if(window._lastPdf) window.open(window._lastPdf, '_blank');
+  });
 
-    // Enhanced key validation
-    async function validateActivationKey(email, key) {
-        try {
-            // Query with case-insensitive email and exact key match
-            const snapshot = await db.collection('activationKeys')
-                .where('key', '==', key.trim().toUpperCase())
-                .where('email', '==', email.trim().toLowerCase())
-                .limit(1)
-                .get();
+  // Admin panel data refresh periodically
+  setInterval(()=>{ if(currentUser) loadAdminKeys(); }, 60000);
 
-            if (snapshot.empty) {
-                return { valid: false, message: 'Invalid activation key or email' };
-            }
-
-            const doc = snapshot.docs[0];
-            const activationData = doc.data();
-
-            // Check key status
-            if (activationData.status === 'revoked') {
-                return { valid: false, message: 'This key has been revoked by admin' };
-            }
-
-            if (activationData.status === 'used' && activationData.activatedAt) {
-                return { valid: false, message: 'This key has already been activated' };
-            }
-
-            // Check if already activated and still valid
-            if (activationData.activatedAt && activationData.expiresAt) {
-                const expiresAt = activationData.expiresAt.toDate();
-                if (expiresAt > new Date()) {
-                    return { 
-                        valid: true, 
-                        message: 'License already active', 
-                        data: activationData,
-                        docId: doc.id
-                    };
-                } else {
-                    return { valid: false, message: 'License has expired' };
-                }
-            }
-
-            return { 
-                valid: true, 
-                message: 'Key valid for activation', 
-                data: activationData,
-                docId: doc.id
-            };
-
-        } catch (error) {
-            console.error('Validation error:', error);
-            return { valid: false, message: 'Error validating key. Please try again.' };
-        }
-    }
-
-    // Enhanced activation function
-    async function activateKeyForUser(email, key) {
-        activationMsg.style.color = '#fff';
-        activationMsg.textContent = 'Validating activation key...';
-        
-        const validation = await validateActivationKey(email, key);
-        
-        if (!validation.valid) {
-            activationMsg.style.color = '#fca5a5';
-            activationMsg.textContent = validation.message;
-            return false;
-        }
-
-        try {
-            const now = new Date();
-            const expiresAt = new Date(now.getTime() + validation.data.durationDays * 24 * 3600 * 1000);
-
-            // Update the activation key in Firebase
-            await db.collection('activationKeys').doc(validation.docId).update({
-                activatedAt: firebase.firestore.FieldValue.serverTimestamp(),
-                expiresAt: firebase.firestore.Timestamp.fromDate(expiresAt),
-                status: 'activated'
-            });
-
-            // Store activation in local storage
-            const licenseData = {
-                key: key,
-                email: email,
-                expiresAt: expiresAt.toISOString(),
-                durationDays: validation.data.durationDays,
-                activatedAt: now.toISOString()
-            };
-            
-            localStorage.setItem(LS_ACTIVE, JSON.stringify(licenseData));
-            
-            // Update user record in receiptUsage
-            await updateUserProStatus(licenseData);
-            
-            activationMsg.style.color = '#86efac';
-            activationMsg.textContent = '✅ Activation successful! Pro features unlocked.';
-            
-            // Update UI
-            setTimeout(() => {
-                checkActivationStatus();
-                hideProModal();
-            }, 1500);
-            
-            return true;
-
-        } catch (error) {
-            console.error('Activation error:', error);
-            activationMsg.style.color = '#fca5a5';
-            activationMsg.textContent = 'Error activating key. Please try again.';
-            return false;
-        }
-    }
-
-    modalActivateBtn.addEventListener('click', async ()=>{
-        const email = (licenseEmail.value||'').trim().toLowerCase();
-        const key = (licenseKeyInput.value||'').trim();
-        if(!email || !key){ 
-            activationMsg.style.color='#fca5a5'; 
-            activationMsg.textContent='Please enter both email and activation key.'; 
-            return; 
-        }
-        await activateKeyForUser(email, key);
-    });
-
-    // ==================== ADMIN AUTHENTICATION ====================
-
-    // Admin authentication with email and password
-    function showAdminLoginModal() {
-        adminLoginBackdrop.classList.add('show');
-        adminLoginBackdrop.setAttribute('aria-hidden','false');
-        adminEmailInput.value = '';
-        adminPasswordInput.value = '';
-        adminEmailInput.focus();
-        adminLoginMsg.textContent = '';
-    }
-
-    async function handleAdminLogin(email, password) {
-        try {
-            // Sign in with email and password
-            const userCredential = await auth.signInWithEmailAndPassword(email, password);
-            const user = userCredential.user;
-            
-            // Get the ID token to check custom claims
-            const idTokenResult = await user.getIdTokenResult();
-            
-            // Check if user has admin claim (you'll need to set this via Firebase Admin SDK)
-            if (idTokenResult.claims.admin || email === 'admin@smartreceipt.com') {
-                adminLoginMsg.style.color = '#86efac';
-                adminLoginMsg.textContent = 'Admin login successful!';
-                
-                setTimeout(() => {
-                    adminLoginBackdrop.classList.remove('show');
-                    adminLoginBackdrop.setAttribute('aria-hidden','true');
-                    openAdminFullscreen();
-                }, 500);
-            } else {
-                // User is not an admin
-                await auth.signOut();
-                adminLoginMsg.style.color = '#fca5a5';
-                adminLoginMsg.textContent = 'Access denied: Not an admin user.';
-            }
-            
-        } catch (error) {
-            console.error('Login error:', error);
-            adminLoginMsg.style.color = '#fca5a5';
-            adminLoginMsg.textContent = 'Login failed. Check email and password.';
-        }
-    }
-
-    // Admin triple click detection -> open login modal
-    let clickCount = 0, clickTimer = null;
-    appTitle.addEventListener('click', ()=> {
-        clickCount++;
-        if(clickTimer) clearTimeout(clickTimer);
-        clickTimer = setTimeout(()=> clickCount = 0, 700);
-        if(clickCount >= 3){
-            clickCount = 0;
-            showAdminLoginModal();
-        }
-    });
-
-    function openAdminFullscreen(){
-        adminFullscreen.classList.add('show');
-        adminFullscreen.setAttribute('aria-hidden','false');
-        renderAdminKeys();
-    }
-    
-    function closeAdminFullscreen(){
-        adminFullscreen.classList.remove('show');
-        adminFullscreen.setAttribute('aria-hidden','true');
-        // Sign out admin
-        auth.signOut();
-    }
-
-    adminLoginClose.addEventListener('click', ()=> { 
-        adminLoginBackdrop.classList.remove('show'); 
-        adminLoginBackdrop.setAttribute('aria-hidden','true'); 
-    });
-    
-    closeAdminBtn.addEventListener('click', closeAdminFullscreen);
-
-    adminLoginSubmit.addEventListener('click', ()=> {
-        const email = (adminEmailInput.value||'').trim();
-        const password = (adminPasswordInput.value||'').trim();
-        if(!email || !password) {
-            adminLoginMsg.style.color = '#fca5a5';
-            adminLoginMsg.textContent = 'Please enter both email and password';
-            return;
-        }
-        handleAdminLogin(email, password);
-    });
-
-    // Also allow Enter key in admin login
-    adminEmailInput.addEventListener('keypress', (e) => {
-        if (e.key === 'Enter') {
-            adminPasswordInput.focus();
-        }
-    });
-    
-    adminPasswordInput.addEventListener('keypress', (e) => {
-        if (e.key === 'Enter') {
-            adminLoginSubmit.click();
-        }
-    });
-
-    // ==================== PDF GENERATION & ACTIONS ====================
-
-    // PDF generation function
-    async function generatePdf(data){
-        // Check if user can generate receipt
-        if (!isProActive && !isTrialActive) {
-            alert('Trial expired. Please activate Pro to generate more receipts.');
-            return null;
-        }
-
-        // Increment receipt count for trial users
-        if (isTrialActive && !isProActive) {
-            receiptCount++;
-            localStorage.setItem(LS_RECEIPT_COUNT, receiptCount.toString());
-            
-            // Update Firebase
-            await updateReceiptCountInFirebase();
-            
-            checkActivationStatus();
-        }
-
-        const { jsPDF } = window.jspdf;
-        const doc = new jsPDF({unit:'pt', format:'a4'});
-        const pageWidth = doc.internal.pageSize.getWidth();
-
-        // Your existing PDF generation code here...
-        // [Keep all your existing PDF generation logic]
-
-        // Simple receipt content for demonstration
-        doc.setFontSize(20);
-        doc.text('SMART RECEIPT PRO', pageWidth/2, 50, {align: 'center'});
-        doc.setFontSize(12);
-        doc.text(`Business: ${data.businessName}`, 50, 100);
-        doc.text(`Payer: ${data.payerName}`, 50, 120);
-        doc.text(`Total Amount: GHS ${data.totalAmount.toFixed(2)}`, 50, 140);
-        doc.text(`Amount Paid: GHS ${data.amountPaid.toFixed(2)}`, 50, 160);
-        doc.text(`Arrears: GHS ${data.arrears.toFixed(2)}`, 50, 180);
-        doc.text(`Date: ${data.date}`, 50, 200);
-        doc.text(`Purpose: ${data.purpose}`, 50, 220);
-
-        return doc.output('blob');
-    }
-
-    // Generate event
-    generateBtn.addEventListener('click', async ()=>{
-        const data = {
-            businessName: businessNameEl.value.trim(),
-            businessContact: businessContactEl.value.trim(),
-            businessEmail: businessEmailEl.value.trim(),
-            payerName: payerNameEl.value.trim(),
-            totalAmount: Number(totalAmountEl.value) || 0,
-            amountPaid: Number(amountPaidEl.value) || 0,
-            arrears: Number(arrearsEl.value) || 0,
-            date: dateEl.value || new Date().toISOString().slice(0,10),
-            purpose: purposeEl.value.trim()
-        };
-        
-        if(!data.businessName || !data.payerName){ 
-            return alert('Please fill Business Name and Payer Name.'); 
-        }
-        
-        preview.textContent = 'Generating PDF...';
-        try{
-            const blob = await generatePdf(data);
-            if (!blob) return; // Generation was blocked (trial expired)
-            
-            if(window._lastPdf) URL.revokeObjectURL(window._lastPdf);
-            window._lastPdf = URL.createObjectURL(blob);
-            downloadBtn.disabled = false;
-            downloadBtn.onclick = ()=> {
-                const a = document.createElement('a'); 
-                a.href = window._lastPdf; 
-                a.download = `receipt_${Date.now()}.pdf`; 
-                a.click();
-            };
-            preview.innerHTML = `✅ PDF ready — <a href="${window._lastPdf}" target="_blank">Open PDF</a> — click Download to save.`;
-        }catch(err){
-            console.error(err);
-            preview.textContent = 'Error generating PDF. Check console.';
-        }
-    });
-
-    // WhatsApp share (text only)
-    whatsappBtn.addEventListener('click', ()=>{
-        const d = { 
-            business: businessNameEl.value, 
-            payer: payerNameEl.value, 
-            total: Number(totalAmountEl.value)||0, 
-            paid: Number(amountPaidEl.value)||0, 
-            arrears: Number(arrearsEl.value)||0, 
-            date: dateEl.value||'' 
-        };
-        const text = `Receipt from ${d.business}\nPayer: ${d.payer}\nTotal: GHS ${d.total.toFixed(2)}\nPaid: GHS ${d.paid.toFixed(2)}\nArrears: GHS ${d.arrears.toFixed(2)}\nDate: ${d.date}`;
-        window.open('https://wa.me/?text='+encodeURIComponent(text),'_blank');
-    });
-
-    // Copy summary
-    copyBtn.addEventListener('click', async ()=>{
-        const txt = `Receipt — ${businessNameEl.value} | ${payerNameEl.value} | Total: GHS ${Number(totalAmountEl.value||0).toFixed(2)} | Paid: GHS ${Number(amountPaidEl.value||0).toFixed(2)} | Arrears: GHS ${Number(arrearsEl.value||0).toFixed(2)} | Date: ${dateEl.value} | Purpose: ${purposeEl.value}`;
-        try{
-            await navigator.clipboard.writeText(txt);
-            alert('Summary copied to clipboard');
-        }catch(e){
-            alert('Copy failed — please select and copy manually:\n' + txt);
-        }
-    });
-
-    // Helper function to escape HTML
-    function escapeHtml(s){
-        if(!s && s !== 0) return '';
-        return String(s).replace(/[&<>"']/g, function(m){ 
-            return ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[m]); 
-        });
-    }
-
-  })();
-  </script>
+  // ----------------------- Finish -----------------------
+  console.log('SmartReceipt Pro Ultra loaded');
+})();
+</script>
 </body>
 </html>
