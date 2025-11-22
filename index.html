@@ -880,33 +880,57 @@
 
     // Validate activation key against Firebase
     async function validateActivationKey(email, key) {
-        try {
-            const snapshot = await db.collection('activationKeys')
-                .where('key', '==', key)
-                .where('email', '==', email.toLowerCase())
-                .get();
+  try {
+    // Query with case-insensitive email and exact key match
+    const snapshot = await db.collection('activationKeys')
+      .where('key', '==', key.trim().toUpperCase())
+      .where('email', '==', email.trim().toLowerCase())
+      .limit(1)
+      .get();
 
-            if (snapshot.empty) {
-                return { valid: false, message: 'Invalid activation key or email' };
-            }
+    if (snapshot.empty) {
+      return { valid: false, message: 'Invalid activation key or email' };
+    }
 
-            const doc = snapshot.docs[0];
-            const activationData = doc.data();
+    const doc = snapshot.docs[0];
+    const activationData = doc.data();
 
-            // Check if already activated
-            if (activationData.activatedAt && activationData.expiresAt) {
-                const expiresAt = activationData.expiresAt.toDate();
-                if (expiresAt > new Date()) {
-                    return { 
-                        valid: true, 
-                        message: 'License already active', 
-                        data: activationData,
-                        docId: doc.id
-                    };
-                } else {
-                    return { valid: false, message: 'License has expired' };
-                }
-            }
+    // Check key status
+    if (activationData.status === 'revoked') {
+      return { valid: false, message: 'This key has been revoked by admin' };
+    }
+
+    if (activationData.status === 'used' && activationData.activatedAt) {
+      return { valid: false, message: 'This key has already been activated' };
+    }
+
+    // Check if already activated and still valid
+    if (activationData.activatedAt && activationData.expiresAt) {
+      const expiresAt = activationData.expiresAt.toDate();
+      if (expiresAt > new Date()) {
+        return { 
+          valid: true, 
+          message: 'License already active', 
+          data: activationData,
+          docId: doc.id
+        };
+      } else {
+        return { valid: false, message: 'License has expired' };
+      }
+    }
+
+    return { 
+      valid: true, 
+      message: 'Key valid for activation', 
+      data: activationData,
+      docId: doc.id
+    };
+
+  } catch (error) {
+    console.error('Validation error:', error);
+    return { valid: false, message: 'Error validating key. Please try again.' };
+  }
+}
 
             // Check if key is valid for activation
             if (activationData.status === 'revoked') {
@@ -1182,3 +1206,4 @@
   </script>
 </body>
 </html>
+
