@@ -962,40 +962,32 @@
     });
 
     // Admin authentication
+   
     function showAdminLoginModal() {
-        adminLoginBackdrop.classList.add('show');
-        adminLoginBackdrop.setAttribute('aria-hidden','false');
-        adminEmailInput.value = '';
-        adminPasswordInput.value = '';
-        adminEmailInput.focus();
-        adminLoginMsg.textContent = '';
-    }
-
-    // Add this function to set up admin claims
-async function setupAdminUser(email, password) {
-    try {
-        // Create user in Firebase Auth
-        const userCredential = await auth.createUserWithEmailAndPassword(email, password);
-        
-        // Set custom claims (you'll need a Cloud Function for this)
-        // Alternatively, you can manually set this in Firebase Console
-        console.log('Admin user created:', userCredential.user.uid);
-        
-        // For now, we'll use a simpler approach - check a specific email
-        return userCredential.user;
-    } catch (error) {
-        console.error('Error creating admin user:', error);
-        throw error;
-    }
+    adminLoginBackdrop.classList.add('show');
+    adminLoginBackdrop.setAttribute('aria-hidden','false');
+    adminEmailInput.value = '';
+    adminPasswordInput.value = '';
+    adminEmailInput.focus();
+    adminLoginMsg.textContent = '';
 }
 
-// Update the handleAdminLogin function to work with simpler security
 async function handleAdminLogin(email, password) {
     try {
-        const userCredential = await auth.signInWithEmailAndPassword(email, password);
+        // For development - create user if doesn't exist
+        try {
+            const userCredential = await auth.createUserWithEmailAndPassword(email, password);
+            console.log('Admin user created/signed in:', userCredential.user.uid);
+        } catch (error) {
+            if (error.code === 'auth/email-already-in-use') {
+                // Sign in if user already exists
+                const userCredential = await auth.signInWithEmailAndPassword(email, password);
+                console.log('Admin user signed in:', userCredential.user.uid);
+            } else {
+                throw error;
+            }
+        }
         
-        // For development, allow any authenticated user to be admin
-        // In production, you should check custom claims or a specific admin list
         adminLoginBackdrop.classList.remove('show');
         adminLoginBackdrop.setAttribute('aria-hidden','true');
         openAdminFullscreen();
@@ -1004,19 +996,25 @@ async function handleAdminLogin(email, password) {
         adminLoginMsg.textContent = 'Login failed: ' + error.message;
     }
 }
-    
-    // Handle admin login
-    async function handleAdminLogin(email, password) {
-        try {
-            const userCredential = await auth.signInWithEmailAndPassword(email, password);
-            adminLoginBackdrop.classList.remove('show');
-            adminLoginBackdrop.setAttribute('aria-hidden','true');
-            openAdminFullscreen();
-        } catch (error) {
-            adminLoginMsg.style.color = '#fca5a5';
-            adminLoginMsg.textContent = 'Login failed: ' + error.message;
-        }
+
+// Update admin panel to check auth state
+async function renderAdminKeys(){
+    if (!auth.currentUser) {
+        adminKeysList.innerHTML = '<tr><td colspan="6" style="color:#ef4444;padding:12px">Not authenticated</td></tr>';
+        return;
     }
+
+    try {
+        const snapshot = await db.collection('activationKeys')
+            .orderBy('createdAt', 'desc')
+            .get();
+        
+        // ... rest of your existing renderAdminKeys code
+    } catch (error) {
+        console.error('Error loading keys:', error);
+        adminKeysList.innerHTML = '<tr><td colspan="6" style="color:#ef4444;padding:12px">Error loading keys: ' + error.message + '</td></tr>';
+    }
+}
 
     // Admin triple click detection
     let clickCount = 0, clickTimer = null;
@@ -1212,4 +1210,5 @@ async function handleAdminLogin(email, password) {
   </script>
 </body>
 </html>
+
 
