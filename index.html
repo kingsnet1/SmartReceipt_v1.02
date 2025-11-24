@@ -110,6 +110,12 @@
       z-index: 1;
       padding: 4px 8px;
       background: transparent;
+      transition: all 0.2s ease;
+    }
+
+    h1:hover {
+      transform: translateX(-50%) scale(1.05);
+      text-shadow: 0 0 10px rgba(251, 191, 36, 0.5);
     }
 
     /* when title text is long wrap gracefully on small screens */
@@ -249,6 +255,15 @@
     
     button.danger {
       background: #ef4444;
+    }
+
+    /* Hidden admin button */
+    .hidden-admin-btn {
+      opacity: 0;
+      position: absolute;
+      width: 1px;
+      height: 1px;
+      pointer-events: none;
     }
 
     .preview{
@@ -421,9 +436,27 @@
     @keyframes spin {
       to { transform: rotate(360deg); }
     }
+
+    /* Click counter indicator */
+    .click-counter {
+      position: fixed;
+      top: 20px;
+      right: 20px;
+      background: rgba(0,0,0,0.7);
+      color: white;
+      padding: 8px 12px;
+      border-radius: 20px;
+      font-size: 0.8rem;
+      font-weight: bold;
+      z-index: 10000;
+      display: none;
+    }
   </style>
 </head>
 <body>
+  <!-- Click counter indicator -->
+  <div id="clickCounter" class="click-counter"></div>
+
   <div class="page-wrap">
     <div class="container" role="region" aria-label="SmartReceipt Form">
       <div class="header-row">
@@ -518,7 +551,8 @@
           <button type="button" id="whatsapp" class="success">Share via WhatsApp</button>
           <button type="button" id="copySummary">Copy Summary</button>
           <button type="button" id="activateBtnUI" class="warning">Activate to Pro</button>
-          <button type="button" id="adminBtnUI" class="danger">Admin Panel</button>
+          <!-- Hidden Admin Panel Button -->
+          <button type="button" id="adminBtnUI" class="hidden-admin-btn">Admin Panel</button>
         </div>
       </form>
 
@@ -671,6 +705,7 @@
     const statusBadge = document.getElementById('statusBadge');
     const trialNotification = document.getElementById('trialNotification');
     const trialDays = document.getElementById('trialDays');
+    const clickCounter = document.getElementById('clickCounter');
 
     // Activation modal
     const proModalBackdrop = document.getElementById('proModalBackdrop');
@@ -727,6 +762,12 @@
     const LS_TRIAL_START = "sr_trialStart";
     const TRIAL_DAYS = 3;
 
+    // Admin access variables
+    let clickCount = 0;
+    let clickTimeout = null;
+    const REQUIRED_CLICKS = 4;
+    const CLICK_TIMEOUT_MS = 2000; // 2 seconds to complete all clicks
+
     // Default date to today
     dateEl.value = new Date().toISOString().slice(0,10);
 
@@ -761,6 +802,64 @@
       // Add logic to disable premium features here
       statusBadge.textContent = "🔒 Trial Expired - Activate Pro";
       statusBadge.style.background = "rgba(239,68,68,0.2)";
+    }
+
+    // Admin access click handler
+    function handleAdminAccessClick() {
+      // Clear existing timeout
+      if (clickTimeout) {
+        clearTimeout(clickTimeout);
+      }
+
+      // Increment click count
+      clickCount++;
+      
+      // Update click counter display
+      clickCounter.textContent = `${clickCount}/${REQUIRED_CLICKS}`;
+      clickCounter.style.display = 'block';
+      
+      // Add visual feedback
+      appTitle.style.transform = 'translateX(-50%) scale(1.1)';
+      appTitle.style.color = '#fbbf24';
+      appTitle.style.textShadow = '0 0 15px rgba(251, 191, 36, 0.8)';
+      
+      setTimeout(() => {
+        appTitle.style.transform = 'translateX(-50%) scale(1)';
+        appTitle.style.color = '';
+        appTitle.style.textShadow = '';
+      }, 200);
+
+      // Check if we reached the required number of clicks
+      if (clickCount >= REQUIRED_CLICKS) {
+        // Reset counter
+        clickCount = 0;
+        clickCounter.style.display = 'none';
+        
+        // Show admin login
+        showAdminLogin();
+        
+        // Success animation
+        appTitle.style.transform = 'translateX(-50%) scale(1.2)';
+        appTitle.style.color = '#22c55e';
+        appTitle.style.textShadow = '0 0 20px rgba(34, 197, 94, 1)';
+        
+        setTimeout(() => {
+          appTitle.style.transform = 'translateX(-50%) scale(1)';
+          appTitle.style.color = '';
+          appTitle.style.textShadow = '';
+        }, 1000);
+      } else {
+        // Set timeout to reset counter if user doesn't complete in time
+        clickTimeout = setTimeout(() => {
+          clickCount = 0;
+          clickCounter.style.display = 'none';
+          
+          // Reset animation
+          appTitle.style.transform = 'translateX(-50%) scale(1)';
+          appTitle.style.color = '';
+          appTitle.style.textShadow = '';
+        }, CLICK_TIMEOUT_MS);
+      }
     }
 
     // Theme switcher
@@ -1158,7 +1257,8 @@
       adminLoginMsg.textContent=''; 
     }
 
-    adminBtnUI.addEventListener('click', showAdminLogin);
+    // Remove the direct admin button click handler and replace with title click
+    appTitle.addEventListener('click', handleAdminAccessClick);
     adminLoginClose.addEventListener('click', hideAdminLogin);
 
     adminLoginSubmit.addEventListener('click', ()=> {
