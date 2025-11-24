@@ -581,6 +581,7 @@
       <div class="admin-actions">
         <button id="adminLogoutBtn" style="background:#6b7280;color:#fff;border:none;padding:8px 12px;border-radius:8px;font-weight:700">Logout</button>
         <button id="closeAdminBtn" style="background:#ef4444;color:#fff;border:none;padding:8px 12px;border-radius:8px;font-weight:700">Close</button>
+        <button id="exportDataBtn" class="primary" style="border:none;padding:8px 12px;border-radius:8px;font-weight:700">Export Data</button>
       </div>
     </div>
 
@@ -618,24 +619,51 @@
         </table>
       </div>
     </div>
+
+    <div class="admin-section">
+      <div class="admin-section-title">User Management</div>
+      <div class="admin-panel-box">
+        <table class="admin-table">
+          <thead>
+            <tr>
+              <th>Email</th>
+              <th>Last Login</th>
+              <th>Status</th>
+            </tr>
+          </thead>
+          <tbody id="usersList"></tbody>
+        </table>
+      </div>
+    </div>
   </div>
 
   <script>
   (function(){
     // Firebase configuration
-   const firebaseConfig = {
-  apiKey: "AIzaSyCdMifjpX4L5cdkPJZKEZAxgIppUYbS5qk",
-  authDomain: "smartreceipt-52dc9.firebaseapp.com",
-  projectId: "smartreceipt-52dc9",
-  storageBucket: "smartreceipt-52dc9.firebasestorage.app",
-  messagingSenderId: "345183601946",
-  appId: "1:345183601946:web:d7a24e83e4132345cd18a3"
-};
+    const firebaseConfig = {
+      apiKey: "AIzaSyCdMifjpX4L5cdkPJZKEZAxgIppUYbS5qk",
+      authDomain: "smartreceipt-52dc9.firebaseapp.com",
+      projectId: "smartreceipt-52dc9",
+      storageBucket: "smartreceipt-52dc9.firebasestorage.app",
+      messagingSenderId: "345183601946",
+      appId: "1:345183601946:web:d7a24e83e4132345cd18a3"
+    };
 
-    // Initialize Firebase
-    firebase.initializeApp(firebaseConfig);
+    // Initialize Firebase with error handling
+    try {
+      firebase.initializeApp(firebaseConfig);
+    } catch (error) {
+      console.log('Firebase already initialized');
+    }
+
     const db = firebase.firestore();
     const auth = firebase.auth();
+
+    // Enable offline persistence for better user experience
+    db.enablePersistence()
+      .catch((err) => {
+        console.log('Firestore persistence failed: ', err);
+      });
 
     // Elements (main)
     const appTitle = document.getElementById('appTitle');
@@ -668,6 +696,8 @@
     const generateKeyBtn = document.getElementById('generateKeyBtn');
     const closeAdminBtn = document.getElementById('closeAdminBtn');
     const adminLogoutBtn = document.getElementById('adminLogoutBtn');
+    const exportDataBtn = document.getElementById('exportDataBtn');
+    const usersList = document.getElementById('usersList');
 
     // Receipt form elements
     const generateBtn = document.getElementById('generate');
@@ -857,6 +887,83 @@
       }
     }
 
+    // Enhanced license activation function
+    async function activateLicense(email, key) {
+      try {
+        // Add rate limiting check
+        const activationAttempts = localStorage.getItem('activationAttempts') || 0;
+        if (activationAttempts > 5) {
+          throw new Error('Too many activation attempts. Please try again later.');
+        }
+
+        const querySnapshot = await db.collection('licenses')
+          .where('key', '==', key.trim().toUpperCase())
+          .where('email', '==', email.toLowerCase().trim())
+          .get();
+
+        if (querySnapshot.empty) {
+          localStorage.setItem('activationAttempts', parseInt(activationAttempts) + 1);
+          throw new Error('Invalid activation key or email');
+        }
+
+        const doc = querySnapshot.docs[0];
+        const license = doc.data();
+
+        // Check if license is already activated
+        if (license.activatedAt && isLicenseValid(license)) {
+          // License already active and valid
+          saveLicenseLocally(license, doc.id);
+          return { success: true, message: 'License activated successfully' };
+        }
+
+        if (license.activatedAt) {
+          throw new Error('This license has already been used');
+        }
+
+        // Activate the license
+        const now = new Date();
+        const expiresAt = new Date(now.getTime() + license.durationDays * 24 * 60 * 60 * 1000);
+
+        await db.collection('licenses').doc(doc.id).update({
+          activatedAt: firebase.firestore.Timestamp.fromDate(now),
+          expiresAt: firebase.firestore.Timestamp.fromDate(expiresAt),
+          activatedBy: email.toLowerCase().trim()
+        });
+
+        // Update local license data
+        const updatedLicense = {
+          ...license,
+          activatedAt: firebase.firestore.Timestamp.fromDate(now),
+          expiresAt: firebase.firestore.Timestamp.fromDate(expiresAt)
+        };
+        
+        saveLicenseLocally(updatedLicense, doc.id);
+        localStorage.setItem('activationAttempts', '0'); // Reset attempts on success
+
+        return { success: true, message: 'License activated successfully' };
+
+      } catch (error) {
+        console.error('License activation error:', error);
+        return { success: false, message: error.message };
+      }
+    }
+
+    function isLicenseValid(license) {
+      if (!license.expiresAt) return false;
+      return new Date(license.expiresAt.toDate()).getTime() > Date.now();
+    }
+
+    function saveLicenseLocally(license, docId) {
+      const licenseData = {
+        key: license.key,
+        email: license.email,
+        expiresAt: license.expiresAt.toDate().toISOString(),
+        docId: docId,
+        activatedAt: license.activatedAt ? license.activatedAt.toDate().toISOString() : null
+      };
+      localStorage.setItem(LS_ACTIVE, JSON.stringify(licenseData));
+    }
+
     // Admin list rendering - dynamic
     function renderAdminKeys(){
       // Clear existing content
@@ -1004,81 +1111,6 @@
     activateBtnUI.addEventListener('click', showProModal);
     modalCloseBtn.addEventListener('click', hideProModal);
 
-    async function activateKeyForUser(email, key){
-      activationMsg.style.color = '#fff';
-      activationMsg.textContent = 'Validating...';
-      
-      try {
-        // Find the key in Firebase
-        const querySnapshot = await db.collection('licenses')
-          .where('key', '==', key)
-          .where('email', '==', email.toLowerCase())
-          .get();
-        
-        if (querySnapshot.empty) {
-          activationMsg.style.color='#fca5a5';
-          activationMsg.textContent='Activation key not found for that email.';
-          return false;
-        }
-        
-        const doc = querySnapshot.docs[0];
-        const rec = doc.data();
-        
-        // Check if already activated and valid
-        if (rec.activatedAt && rec.expiresAt && new Date(rec.expiresAt.toDate()) > new Date()) {
-          // Already activated and valid
-          const licenseData = {
-            key: rec.key,
-            email: rec.email,
-            expiresAt: rec.expiresAt.toDate().toISOString()
-          };
-          localStorage.setItem(LS_ACTIVE, JSON.stringify(licenseData));
-          
-          activationMsg.style.color = '#86efac';
-          activationMsg.textContent = 'Already activated — Pro enabled.';
-          updateStatusBadge();
-          setTimeout(hideProModal, 700);
-          return true;
-        }
-        
-        // Check if key is already used
-        if (rec.activatedAt) {
-          activationMsg.style.color='#fca5a5';
-          activationMsg.textContent='This activation key has already been used.';
-          return false;
-        }
-        
-        // Activate the key
-        const now = new Date();
-        const expires = new Date(now.getTime() + rec.durationDays * 24 * 60 * 60 * 1000);
-        
-        await db.collection('licenses').doc(doc.id).update({
-          activatedAt: firebase.firestore.Timestamp.fromDate(now),
-          expiresAt: firebase.firestore.Timestamp.fromDate(expires)
-        });
-        
-        // Store activation locally
-        const licenseData = {
-          key: rec.key,
-          email: rec.email,
-          expiresAt: expires.toISOString()
-        };
-        localStorage.setItem(LS_ACTIVE, JSON.stringify(licenseData));
-        
-        activationMsg.style.color = '#86efac';
-        activationMsg.textContent = 'Activated — Pro unlocked.';
-        updateStatusBadge();
-        setTimeout(hideProModal, 700);
-        return true;
-        
-      } catch (error) {
-        console.error('Error activating license: ', error);
-        activationMsg.style.color='#fca5a5';
-        activationMsg.textContent='Error activating license. Please try again.';
-        return false;
-      }
-    }
-
     modalActivateBtn.addEventListener('click', async ()=>{
       const email = (licenseEmail.value||'').trim().toLowerCase();
       const key = (licenseKeyInput.value||'').trim();
@@ -1093,7 +1125,17 @@
       modalActivateBtn.innerHTML = '<span class="spinner"></span>Activating...';
       modalActivateBtn.disabled = true;
       
-      await activateKeyForUser(email, key);
+      const result = await activateLicense(email, key);
+      
+      if (result.success) {
+        activationMsg.style.color = '#86efac';
+        activationMsg.textContent = result.message;
+        updateStatusBadge();
+        setTimeout(hideProModal, 1500);
+      } else {
+        activationMsg.style.color='#fca5a5';
+        activationMsg.textContent=result.message;
+      }
       
       // Reset button
       modalActivateBtn.innerHTML = 'Activate';
@@ -1165,6 +1207,7 @@
       adminFullscreen.classList.add('show');
       adminFullscreen.setAttribute('aria-hidden','false');
       renderAdminKeys();
+      renderUsersList();
     }
     
     function closeAdminFullscreen(){
@@ -1184,6 +1227,50 @@
         });
     });
 
+    // Export data functionality
+    exportDataBtn.addEventListener('click', async () => {
+      try {
+        const querySnapshot = await db.collection('licenses').get();
+        const data = [];
+        
+        querySnapshot.forEach((doc) => {
+          data.push({
+            id: doc.id,
+            ...doc.data(),
+            createdAt: doc.data().createdAt?.toDate(),
+            activatedAt: doc.data().activatedAt?.toDate(),
+            expiresAt: doc.data().expiresAt?.toDate()
+          });
+        });
+        
+        const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `licenses-export-${new Date().toISOString().split('T')[0]}.json`;
+        a.click();
+        URL.revokeObjectURL(url);
+        
+      } catch (error) {
+        console.error('Export error:', error);
+        alert('Error exporting data');
+      }
+    });
+
+    // User management
+    function renderUsersList() {
+      const currentUser = auth.currentUser;
+      if (currentUser) {
+        usersList.innerHTML = `
+          <tr>
+            <td>${currentUser.email}</td>
+            <td>${new Date().toLocaleString()}</td>
+            <td><span class="key-status active">Online</span></td>
+          </tr>
+        `;
+      }
+    }
+
     // Check auth state
     auth.onAuthStateChanged((user) => {
       if (user) {
@@ -1196,9 +1283,56 @@
       }
     });
 
+    // Enhanced error handling
+    function setupFirebaseErrorHandling() {
+      // Auth state error handling
+      auth.onAuthStateChanged((user) => {
+        if (user) {
+          console.log('User signed in:', user.email);
+        } else {
+          console.log('User signed out');
+        }
+      }, (error) => {
+        console.error('Auth state error:', error);
+      });
+
+      // Firestore error handling
+      db.collection('licenses').onSnapshot(() => {
+        // Success
+      }, (error) => {
+        console.error('Firestore error:', error);
+        if (error.code === 'permission-denied') {
+          alert('Permission denied. Please contact administrator.');
+        }
+      });
+    }
+
+    // Setup admin user (run once to create admin)
+    async function setupAdminUser() {
+      const adminEmail = "admin@smartreceipt.com";
+      const adminPassword = "admin123"; // Change this in production!
+      
+      try {
+        // Try to create admin user
+        const userCredential = await auth.createUserWithEmailAndPassword(adminEmail, adminPassword);
+        console.log('Admin user created successfully:', userCredential.user.email);
+        
+      } catch (error) {
+        if (error.code === 'auth/email-already-in-use') {
+          console.log('Admin user already exists');
+        } else {
+          console.error('Error creating admin user:', error);
+        }
+      }
+    }
+
     // Initialize trial and activation status
     initializeTrial();
     updateStatusBadge();
+    setupFirebaseErrorHandling();
+
+    // Uncomment the line below to create the admin user (run once)
+    // setupAdminUser();
 
     // PDF generation - professional layout (kept intact)
     async function generatePdf(data){
@@ -1333,28 +1467,7 @@
       return String(s).replace(/[&<>"']/g, function(m){ return ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[m]); });
     }
 
-    // Setup Firebase admin user (run once to create admin)
-    function setupAdminUser() {
-      // This should be run once to create an admin user
-      // Replace with your desired admin credentials
-      const adminEmail = "admin@smartreceipt.com";
-      const adminPassword = "admin123";
-      
-      auth.createUserWithEmailAndPassword(adminEmail, adminPassword)
-        .then((userCredential) => {
-          console.log('Admin user created:', userCredential.user);
-        })
-        .catch((error) => {
-          // User might already exist, which is fine
-          console.log('Admin user setup:', error.message);
-        });
-    }
-    
-    // Uncomment the line below to create the admin user (run once)
-    // setupAdminUser();
-
   })();
   </script>
 </body>
 </html>
-
