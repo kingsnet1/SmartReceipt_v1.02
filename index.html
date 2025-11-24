@@ -597,8 +597,7 @@
           style="display: none"
         >
           <strong>Free Trial Active</strong> - You have
-          <span id="trialDays">3</span> days remaining. Activate with a license
-          key to continue using Pro features.
+          <span id="trialDays">3</span> receipt generations remaining. Activate with a license key for unlimited receipts.
         </div>
 
         <!-- Theme switcher -->
@@ -1083,10 +1082,10 @@
         const signatureUpload = document.getElementById("signatureUpload");
         const signaturePreview = document.getElementById("signaturePreview");
 
-        // State & storage keys
+        // State & storage keys - UPDATED FOR RECEIPT COUNTING
         const LS_ACTIVE = "sr_activeLicense";
-        const LS_TRIAL_START = "sr_trialStart";
-        const TRIAL_DAYS = 3;
+        const LS_TRIAL_USED = "sr_trialUsed"; // Track used receipt counts
+        const TRIAL_LIMIT = 3; // 3 receipt generations allowed
 
         // Admin access variables
         let clickCount = 0;
@@ -1097,41 +1096,74 @@
         // Default date to today
         dateEl.value = new Date().toISOString().slice(0, 10);
 
-        // Initialize trial period
+        // Initialize trial receipt counter - UPDATED
         function initializeTrial() {
-          if (!localStorage.getItem(LS_TRIAL_START)) {
-            localStorage.setItem(LS_TRIAL_START, new Date().toISOString());
+          // Initialize trial used count if it doesn't exist
+          if (!localStorage.getItem(LS_TRIAL_USED)) {
+            localStorage.setItem(LS_TRIAL_USED, "0");
           }
+          
+          const usedCount = parseInt(localStorage.getItem(LS_TRIAL_USED)) || 0;
+          const remaining = TRIAL_LIMIT - usedCount;
+          
+          console.log("Trial status:", { used: usedCount, remaining: remaining, limit: TRIAL_LIMIT });
 
-          const trialStart = new Date(localStorage.getItem(LS_TRIAL_START));
-          const trialEnd = new Date(
-            trialStart.getTime() + TRIAL_DAYS * 24 * 60 * 60 * 1000
-          );
-          const now = new Date();
-
-          if (now < trialEnd) {
-            // Trial is active
-            const daysLeft = Math.ceil(
-              (trialEnd - now) / (24 * 60 * 60 * 1000)
-            );
-            trialDays.textContent = daysLeft;
+          if (remaining > 0) {
+            // Trial has remaining generations
+            trialDays.textContent = remaining;
             trialNotification.style.display = "block";
           } else {
-            // Trial expired
+            // Trial limit reached
             trialNotification.style.display = "none";
             // Check if user has active license
             if (!getCurrentActivation()) {
-              // Disable pro features
               disableProFeatures();
             }
           }
         }
 
-        // Disable pro features when trial expires and no license
+        // Increment trial counter when user generates a receipt
+        function incrementTrialCounter() {
+          const usedCount = parseInt(localStorage.getItem(LS_TRIAL_USED)) || 0;
+          const newCount = usedCount + 1;
+          localStorage.setItem(LS_TRIAL_USED, newCount.toString());
+          
+          console.log("Trial counter incremented:", newCount);
+          return newCount;
+        }
+
+        // Check if user can generate more receipts
+        function canGenerateReceipt() {
+          const cur = getCurrentActivation();
+          if (cur && isActivationValid(cur)) {
+            return true; // Licensed users have unlimited generations
+          }
+          
+          const usedCount = parseInt(localStorage.getItem(LS_TRIAL_USED)) || 0;
+          return usedCount < TRIAL_LIMIT;
+        }
+
+        // Get remaining trial receipts
+        function getRemainingTrialReceipts() {
+          const usedCount = parseInt(localStorage.getItem(LS_TRIAL_USED)) || 0;
+          return Math.max(0, TRIAL_LIMIT - usedCount);
+        }
+
+        // Disable pro features when trial limit reached
         function disableProFeatures() {
-          // Add logic to disable premium features here
-          statusBadge.textContent = "🔒 Trial Expired - Activate Pro";
+          generateBtn.disabled = true;
+          generateBtn.innerHTML = "Trial Expired - Activate Pro";
+          generateBtn.style.background = "rgba(239,68,68,0.5)";
+          
+          statusBadge.textContent = "🔒 Trial Limit Reached - Activate Pro";
           statusBadge.style.background = "rgba(239,68,68,0.2)";
+          
+          // Show activation prompt
+          setTimeout(() => {
+            if (!getCurrentActivation()) {
+              showProModal();
+            }
+          }, 1000);
         }
 
         // Admin access click handler
@@ -1315,7 +1347,7 @@
           return `SR-${chunk()}-${chunk()}-${chunk()}`;
         }
 
-        // Update status badge based on active license
+        // Update status badge based on active license - UPDATED
         function isActivationValid(rec) {
           if (!rec || !rec.expiresAt) return false;
           return new Date(rec.expiresAt).getTime() > Date.now();
@@ -1335,37 +1367,37 @@
           const cur = getCurrentActivation();
           if (cur && isActivationValid(cur)) {
             const daysLeft = Math.ceil(
-              (new Date(cur.expiresAt).getTime() - Date.now()) /
-                (24 * 3600 * 1000)
+              (new Date(cur.expiresAt).getTime() - Date.now()) / (24 * 3600 * 1000)
             );
             statusBadge.textContent = `🔓 Pro — ${cur.email} (${daysLeft} day${
               daysLeft !== 1 ? "s" : ""
             } left)`;
             statusBadge.style.background = "rgba(34,197,94,0.2)";
             trialNotification.style.display = "none";
+            
+            // Re-enable generate button for licensed users
+            generateBtn.disabled = false;
+            generateBtn.innerHTML = "Generate PDF";
+            generateBtn.style.background = "";
           } else {
-            // Check if trial is active
-            const trialStart = localStorage.getItem(LS_TRIAL_START);
-            if (trialStart) {
-              const trialEnd = new Date(
-                new Date(trialStart).getTime() +
-                  TRIAL_DAYS * 24 * 60 * 60 * 1000
-              );
-              if (new Date() < trialEnd) {
-                const daysLeft = Math.ceil(
-                  (trialEnd - new Date()) / (24 * 60 * 60 * 1000)
-                );
-                statusBadge.textContent = `🔓 Trial — ${daysLeft} day${
-                  daysLeft !== 1 ? "s" : ""
-                } left`;
-                statusBadge.style.background = "rgba(251,191,36,0.2)";
-              } else {
-                statusBadge.textContent = `🔒 Trial Expired - Activate Pro`;
-                statusBadge.style.background = "rgba(239,68,68,0.2)";
-              }
+            // Check trial receipt count
+            const usedCount = parseInt(localStorage.getItem(LS_TRIAL_USED)) || 0;
+            const remaining = TRIAL_LIMIT - usedCount;
+            
+            if (remaining > 0) {
+              statusBadge.textContent = `🔓 Trial — ${remaining} receipt${
+                remaining !== 1 ? "s" : ""
+              } left`;
+              statusBadge.style.background = "rgba(251,191,36,0.2)";
+              
+              // Enable generate button
+              generateBtn.disabled = false;
+              generateBtn.innerHTML = "Generate PDF";
+              generateBtn.style.background = "";
             } else {
-              statusBadge.textContent = `🔒 Pro: Not activated`;
-              statusBadge.style.background = "rgba(255,255,255,0.06)";
+              statusBadge.textContent = `🔒 Trial Limit Reached - Activate Pro`;
+              statusBadge.style.background = "rgba(239,68,68,0.2)";
+              disableProFeatures();
             }
           }
         }
@@ -2161,8 +2193,15 @@
           return inWords(Math.floor(n)) + " Ghana Cedis";
         }
 
-        // Generate event
+        // Generate event with trial limit enforcement - UPDATED
         generateBtn.addEventListener("click", async () => {
+          // Check if user can generate more receipts
+          if (!canGenerateReceipt()) {
+            alert("Trial limit reached! Please activate with a license key to continue generating receipts.");
+            showProModal();
+            return;
+          }
+
           const data = {
             businessName: businessNameEl.value.trim(),
             businessContact: businessContactEl.value.trim(),
@@ -2174,9 +2213,11 @@
             date: dateEl.value || new Date().toISOString().slice(0, 10),
             purpose: purposeEl.value.trim(),
           };
+          
           if (!data.businessName || !data.payerName) {
             return alert("Please fill Business Name and Payer Name.");
           }
+          
           preview.textContent = "Generating PDF...";
           try {
             const blob = await generatePdf(data);
@@ -2190,7 +2231,21 @@
               a.click();
             };
             preview.innerHTML = `✅ PDF ready — <a href="${window._lastPdf}" target="_blank">Open PDF</a> — click Download to save.`;
-            alert("Receipt generated.");
+            
+            // Increment trial counter only for non-licensed users
+            if (!getCurrentActivation()) {
+              const newCount = incrementTrialCounter();
+              const remaining = TRIAL_LIMIT - newCount;
+              
+              alert(`Receipt generated! ${remaining} receipt${remaining !== 1 ? 's' : ''} remaining in your trial.`);
+              
+              // Update UI
+              updateStatusBadge();
+              initializeTrial();
+            } else {
+              alert("Receipt generated!");
+            }
+            
           } catch (err) {
             console.error(err);
             preview.textContent = "Error generating PDF. Check console.";
@@ -2249,6 +2304,23 @@
               "'": "&#39;",
             }[m];
           });
+        }
+
+        // Debug and reset trial (for testing)
+        function debugTrial() {
+          const used = parseInt(localStorage.getItem(LS_TRIAL_USED)) || 0;
+          const remaining = TRIAL_LIMIT - used;
+          const hasLicense = !!getCurrentActivation();
+          
+          console.log("=== TRIAL DEBUG ===");
+          console.log("Receipts used:", used);
+          console.log("Receipts remaining:", remaining);
+          console.log("Trial limit:", TRIAL_LIMIT);
+          console.log("Has active license:", hasLicense);
+          console.log("Can generate more:", canGenerateReceipt());
+          console.log("===================");
+          
+          return { used, remaining, hasLicense };
         }
       })();
     </script>
