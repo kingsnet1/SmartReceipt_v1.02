@@ -343,6 +343,7 @@
         gap: 8px;
         justify-content: center;
         margin-top: 12px;
+        flex-wrap: wrap;
       }
       .theme-btn {
         padding: 8px 10px;
@@ -360,6 +361,60 @@
         background: var(--accent-blue);
       }
 
+      /* Receipt Theme Selector */
+      .receipt-theme-selector {
+        margin: 16px 0;
+        padding: 16px;
+        border-radius: 12px;
+        background: rgba(255, 255, 255, 0.08);
+        border: 1px solid rgba(255, 255, 255, 0.12);
+      }
+
+      .receipt-theme-title {
+        font-size: 1.1rem;
+        font-weight: 700;
+        margin-bottom: 12px;
+        color: var(--accent-yellow);
+        text-align: center;
+      }
+
+      .receipt-theme-options {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
+        gap: 10px;
+        margin-top: 12px;
+      }
+
+      .receipt-theme-option {
+        padding: 12px 8px;
+        border-radius: 8px;
+        border: 2px solid rgba(255, 255, 255, 0.2);
+        background: rgba(255, 255, 255, 0.05);
+        cursor: pointer;
+        text-align: center;
+        transition: all 0.3s ease;
+        font-weight: 600;
+        font-size: 0.9rem;
+      }
+
+      .receipt-theme-option:hover {
+        transform: translateY(-2px);
+        border-color: var(--accent-yellow);
+      }
+
+      .receipt-theme-option.active {
+        border-color: var(--accent-yellow);
+        background: rgba(251, 191, 36, 0.15);
+        box-shadow: 0 4px 12px rgba(251, 191, 36, 0.3);
+      }
+
+      .theme-preview {
+        width: 100%;
+        height: 8px;
+        border-radius: 4px;
+        margin-bottom: 6px;
+      }
+
       /* responsive */
       @media (max-width: 720px) {
         .row {
@@ -370,6 +425,9 @@
         }
         button {
           width: 100%;
+        }
+        .receipt-theme-options {
+          grid-template-columns: repeat(auto-fit, minmax(100px, 1fr));
         }
       }
 
@@ -655,6 +713,14 @@
             <input id="businessLogo" type="file" accept="image/*" />
           </label>
           <div class="logo-preview" id="logoPreview">No logo uploaded</div>
+
+          <!-- Receipt Theme Selector -->
+          <div class="receipt-theme-selector">
+            <div class="receipt-theme-title">🎨 Receipt Color Theme</div>
+            <div class="receipt-theme-options" id="receiptThemeOptions">
+              <!-- Themes will be populated by JavaScript -->
+            </div>
+          </div>
 
           <!-- Payer and amounts -->
           <label style="margin-top: 14px"
@@ -1029,6 +1095,7 @@
         const trialNotification = document.getElementById("trialNotification");
         const trialDays = document.getElementById("trialDays");
         const clickCounter = document.getElementById("clickCounter");
+        const receiptThemeOptions = document.getElementById("receiptThemeOptions");
 
         // Activation modal
         const proModalBackdrop = document.getElementById("proModalBackdrop");
@@ -1085,7 +1152,87 @@
         // State & storage keys - UPDATED FOR RECEIPT COUNTING
         const LS_ACTIVE = "sr_activeLicense";
         const LS_TRIAL_USED = "sr_trialUsed"; // Track used receipt counts
+        const LS_RECEIPT_THEME = "sr_receiptTheme"; // Store selected receipt theme
         const TRIAL_LIMIT = 3; // 3 receipt generations allowed
+
+        // Receipt Color Themes
+        const receiptThemes = {
+          professional: {
+            name: "Professional Blue",
+            primary: "#1e3a8a",
+            secondary: "#3b82f6",
+            accent: "#fbbf24",
+            text: "#1e293b",
+            background: "#ffffff",
+            border: "#e2e8f0"
+          },
+          corporate: {
+            name: "Corporate Gray",
+            primary: "#374151",
+            secondary: "#6b7280",
+            accent: "#059669",
+            text: "#1f2937",
+            background: "#f9fafb",
+            border: "#d1d5db"
+          },
+          elegant: {
+            name: "Elegant Purple",
+            primary: "#5b21b6",
+            secondary: "#8b5cf6",
+            accent: "#ec4899",
+            text: "#1e1b4b",
+            background: "#faf5ff",
+            border: "#ddd6fe"
+          },
+          modern: {
+            name: "Modern Green",
+            primary: "#065f46",
+            secondary: "#059669",
+            accent: "#d97706",
+            text: "#064e3b",
+            background: "#f0fdf4",
+            border: "#bbf7d0"
+          },
+          luxury: {
+            name: "Luxury Gold",
+            primary: "#854d0e",
+            secondary: "#ca8a04",
+            accent: "#dc2626",
+            text: "#451a03",
+            background: "#fefce8",
+            border: "#fef08a"
+          },
+          minimal: {
+            name: "Minimal Black",
+            primary: "#000000",
+            secondary: "#404040",
+            accent: "#dc2626",
+            text: "#171717",
+            background: "#ffffff",
+            border: "#d4d4d4"
+          },
+          vibrant: {
+            name: "Vibrant Orange",
+            primary: "#ea580c",
+            secondary: "#f97316",
+            accent: "#dc2626",
+            text: "#431407",
+            background: "#fff7ed",
+            border: "#fdba74"
+          },
+          calm: {
+            name: "Calm Teal",
+            primary: "#0f766e",
+            secondary: "#14b8a6",
+            accent: "#f59e0b",
+            text: "#134e4a",
+            background: "#f0fdfa",
+            border: "#99f6e4"
+          }
+        };
+
+        // Current selected receipt theme
+        let currentReceiptTheme = 'professional';
 
         // Admin access variables
         let clickCount = 0;
@@ -1095,6 +1242,49 @@
 
         // Default date to today
         dateEl.value = new Date().toISOString().slice(0, 10);
+
+        // Initialize receipt theme selector
+        function initializeReceiptTheme() {
+          // Load saved theme or use default
+          const savedTheme = localStorage.getItem(LS_RECEIPT_THEME);
+          if (savedTheme && receiptThemes[savedTheme]) {
+            currentReceiptTheme = savedTheme;
+          }
+
+          // Populate theme options
+          receiptThemeOptions.innerHTML = '';
+          
+          Object.keys(receiptThemes).forEach(themeKey => {
+            const theme = receiptThemes[themeKey];
+            const themeOption = document.createElement('div');
+            themeOption.className = `receipt-theme-option ${themeKey === currentReceiptTheme ? 'active' : ''}`;
+            themeOption.setAttribute('data-theme', themeKey);
+            
+            themeOption.innerHTML = `
+              <div class="theme-preview" style="background: linear-gradient(90deg, ${theme.primary}, ${theme.secondary}, ${theme.accent})"></div>
+              ${theme.name}
+            `;
+            
+            themeOption.addEventListener('click', () => selectReceiptTheme(themeKey));
+            receiptThemeOptions.appendChild(themeOption);
+          });
+        }
+
+        // Select receipt theme
+        function selectReceiptTheme(themeKey) {
+          currentReceiptTheme = themeKey;
+          localStorage.setItem(LS_RECEIPT_THEME, themeKey);
+          
+          // Update UI
+          document.querySelectorAll('.receipt-theme-option').forEach(option => {
+            option.classList.remove('active');
+            if (option.getAttribute('data-theme') === themeKey) {
+              option.classList.add('active');
+            }
+          });
+          
+          console.log('Receipt theme selected:', themeKey);
+        }
 
         // Initialize trial receipt counter - UPDATED
         function initializeTrial() {
@@ -1979,19 +2169,18 @@
           }
         }
 
-        // Initialize trial and activation status
-        initializeTrial();
-        updateStatusBadge();
-        setupFirebaseErrorHandling();
-
-        // Uncomment the line below to create the admin user (run once)
-        // setupAdminUser();
-
-        // PDF generation - professional layout (kept intact)
+        // PDF generation with theme support - UPDATED
         async function generatePdf(data) {
           const { jsPDF } = window.jspdf;
           const doc = new jsPDF({ unit: "pt", format: "a4" });
           const pageWidth = doc.internal.pageSize.getWidth();
+          
+          // Get current theme
+          const theme = receiptThemes[currentReceiptTheme];
+          
+          // Set background color
+          doc.setFillColor(theme.background);
+          doc.rect(0, 0, pageWidth, doc.internal.pageSize.getHeight(), 'F');
 
           // Header: logo (centered top) and business name
           const headerY = 36;
@@ -2011,11 +2200,13 @@
           const nameY = logoDataURL ? headerY + 120 : headerY + 10;
           doc.setFont("helvetica", "bold");
           doc.setFontSize(18);
+          doc.setTextColor(theme.primary);
           doc.text(data.businessName || "Business Name", pageWidth / 2, nameY, {
             align: "center",
           });
           doc.setFont("helvetica", "normal");
           doc.setFontSize(11);
+          doc.setTextColor(theme.text);
           const contactLine = `${data.businessContact || ""}${
             data.businessContact && data.businessEmail ? " | " : ""
           }${data.businessEmail || ""}`;
@@ -2026,9 +2217,11 @@
           // Title
           doc.setFont("helvetica", "bold");
           doc.setFontSize(12);
+          doc.setTextColor(theme.primary);
           doc.text("OFFICIAL RECEIPT", pageWidth / 2, nameY + 36, {
             align: "center",
           });
+          doc.setDrawColor(theme.primary);
           doc.setLineWidth(0.8);
           doc.line(48, nameY + 44, pageWidth - 48, nameY + 44);
 
@@ -2036,22 +2229,27 @@
           let cursorY = nameY + 70;
           doc.setFont("helvetica", "normal");
           doc.setFontSize(11);
+          doc.setTextColor(theme.text);
           const boxX = 48,
             boxW = pageWidth - 96,
             boxY = cursorY,
             boxH = 170;
-          doc.setDrawColor(200);
+          doc.setDrawColor(theme.border);
           doc.setLineWidth(0.6);
           doc.roundedRect(boxX, boxY, boxW, boxH, 6, 6, "S");
 
           let rowY = boxY + 24;
           doc.setFont("helvetica", "bold");
+          doc.setTextColor(theme.primary);
           doc.text("Payer Name:", boxX + 18, rowY);
+          doc.setTextColor(theme.text);
           doc.text(data.payerName || "-", boxX + boxW - 18, rowY, {
             align: "right",
           });
           rowY += 22;
+          doc.setTextColor(theme.primary);
           doc.text("Total Amount:", boxX + 18, rowY);
+          doc.setTextColor(theme.text);
           doc.text(
             `GHS ${data.totalAmount.toFixed(2)}`,
             boxX + boxW - 18,
@@ -2059,7 +2257,9 @@
             { align: "right" }
           );
           rowY += 22;
+          doc.setTextColor(theme.primary);
           doc.text("Amount Paid:", boxX + 18, rowY);
+          doc.setTextColor(theme.text);
           doc.text(
             `GHS ${data.amountPaid.toFixed(2)}`,
             boxX + boxW - 18,
@@ -2067,16 +2267,22 @@
             { align: "right" }
           );
           rowY += 22;
+          doc.setTextColor(theme.primary);
           doc.text("Arrears:", boxX + 18, rowY);
+          doc.setTextColor(theme.text);
           doc.text(`GHS ${data.arrears.toFixed(2)}`, boxX + boxW - 18, rowY, {
             align: "right",
           });
           rowY += 22;
+          doc.setTextColor(theme.primary);
           doc.text("Date:", boxX + 18, rowY);
+          doc.setTextColor(theme.text);
           doc.text(data.date, boxX + boxW - 18, rowY, { align: "right" });
           rowY += 22;
           doc.setFont("helvetica", "normal");
+          doc.setTextColor(theme.primary);
           doc.text("Purpose:", boxX + 18, rowY);
+          doc.setTextColor(theme.text);
           const purposeLines = doc.splitTextToSize(
             data.purpose || "-",
             boxW - 36
@@ -2087,6 +2293,7 @@
           // Amount in words (simple)
           try {
             doc.setFontSize(10);
+            doc.setTextColor(theme.secondary);
             doc.text(
               "Amount (in words): " + amountInWords(data.amountPaid),
               boxX + 18,
@@ -2102,6 +2309,7 @@
             const sigX = pageWidth - 48 - sigW,
               sigY = cursorY;
             doc.setFont("helvetica", "normal");
+            doc.setTextColor(theme.primary);
             doc.text("Authorized Signature:", sigX - 10, sigY - 6, {
               align: "right",
             });
@@ -2116,15 +2324,18 @@
           }
 
           // Footer
+          doc.setDrawColor(theme.border);
           doc.setLineWidth(0.6);
           doc.line(48, cursorY, pageWidth - 48, cursorY);
           cursorY += 14;
           doc.setFont("helvetica", "italic");
           doc.setFontSize(10);
+          doc.setTextColor(theme.secondary);
           doc.text("Thank you for your business!", pageWidth / 2, cursorY, {
             align: "center",
           });
           cursorY += 12;
+          doc.setTextColor(theme.accent);
           doc.text("Powered by SmartReceipt", pageWidth / 2, cursorY, {
             align: "center",
           });
@@ -2237,13 +2448,13 @@
               const newCount = incrementTrialCounter();
               const remaining = TRIAL_LIMIT - newCount;
               
-              alert(`Receipt generated! ${remaining} receipt${remaining !== 1 ? 's' : ''} remaining in your trial.`);
+              alert(`Receipt generated with ${receiptThemes[currentReceiptTheme].name} theme! ${remaining} receipt${remaining !== 1 ? 's' : ''} remaining in your trial.`);
               
               // Update UI
               updateStatusBadge();
               initializeTrial();
             } else {
-              alert("Receipt generated!");
+              alert(`Receipt generated with ${receiptThemes[currentReceiptTheme].name} theme!`);
             }
             
           } catch (err) {
@@ -2318,10 +2529,20 @@
           console.log("Trial limit:", TRIAL_LIMIT);
           console.log("Has active license:", hasLicense);
           console.log("Can generate more:", canGenerateReceipt());
+          console.log("Current receipt theme:", currentReceiptTheme);
           console.log("===================");
           
           return { used, remaining, hasLicense };
         }
+
+        // Initialize everything
+        initializeReceiptTheme();
+        initializeTrial();
+        updateStatusBadge();
+        setupFirebaseErrorHandling();
+
+        // Uncomment the line below to create the admin user (run once)
+        // setupAdminUser();
       })();
     </script>
   </body>
