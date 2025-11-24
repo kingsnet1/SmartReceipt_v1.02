@@ -1,1573 +1,2256 @@
-<!doctype html>
+<!DOCTYPE html>
 <html lang="en">
-<head>
-  <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width,initial-scale=1" />
-  <title>SmartReceipt Pro</title>
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
-  <!-- Firebase SDK -->
-  <script src="https://www.gstatic.com/firebasejs/9.22.1/firebase-app-compat.js"></script>
-  <script src="https://www.gstatic.com/firebasejs/9.22.1/firebase-firestore-compat.js"></script>
-  <script src="https://www.gstatic.com/firebasejs/9.22.1/firebase-auth-compat.js"></script>
-
-  <style>
-    /* ===== Theme variables (updated by JS theme switcher) ===== */
-    :root{
-      --grad1: #1e3a8a; /* Dark blue */
-      --grad2: #3b82f6; /* Medium blue */
-      --grad3: #fbbf24; /* Yellow accent */
-      --glass-bg: rgba(255,255,255,0.12);
-      --glass-border: rgba(255,255,255,0.25);
-      --input-bg: rgba(255,255,255,0.18);
-      --muted: rgba(255,255,255,0.85);
-      --admin-bg: #0b1220; /* solid admin background */
-      --accent-yellow: #fbbf24;
-      --accent-blue: #3b82f6;
-    }
-
-    /* Make page always scrollable, avoid header jumping on mobile keyboard */
-    html,body{height:100%}
-    body{
-      margin:0;
-      font-family: Inter, system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial;
-      -webkit-font-smoothing:antialiased;
-      -moz-osx-font-smoothing:grayscale;
-      background: linear-gradient(135deg,var(--grad1),var(--grad2),var(--grad3));
-      background-size: 400% 400%;
-      animation: gradientShift 10s ease infinite;
-      display:block;
-      min-height:100vh;
-      padding:28px; /* give space for keyboard on mobile */
-      box-sizing:border-box;
-    }
-    @keyframes gradientShift{
-      0%{background-position:0% 50%}
-      50%{background-position:100% 50%}
-      100%{background-position:0% 50%}
-    }
-
-    /* central wrapper to center container but allow page scrolling */
-    .page-wrap{
-      display:flex;
-      justify-content:center;
-      align-items:flex-start; /* prevents container from jumping up when keyboard opens */
-      width:100%;
-      margin:0 auto;
-    }
-
-    /* ===== Glass card ===== */
-    .container{
-      width:92%;
-      max-width:980px;
-      padding:28px;
-      border-radius:18px;
-      background:var(--glass-bg);
-      box-shadow: 0 12px 45px rgba(0,0,0,0.30);
-      border: 1px solid var(--glass-border);
-      backdrop-filter: blur(18px) saturate(120%);
-      -webkit-backdrop-filter: blur(18px) saturate(120%);
-      color: #fff;
-      box-sizing:border-box;
-      margin-bottom: 32px;
-      position: relative;
-    }
-
-    /* ===== header area: status badge + title (fixed layout to prevent overlap) ===== */
-    .header-row{
-      display:block;
-      position:relative;
-      padding: 6px 0 12px 0;
-    }
-
-    /* status badge is anchored left */
-    .status-badge {
-      position: absolute;
-      left: 16px;
-      top: 6px;
-      background: rgba(255,255,255,0.06);
-      padding: 8px 12px;
-      border-radius: 12px;
-      font-weight: 700;
-      font-size: 0.88rem;
-      white-space:nowrap;
-      z-index: 2;
-      border-left: 3px solid var(--accent-yellow);
-    }
-
-    /* title is centered using absolute centering (left:50% + transform) so badge doesn't push it */
-    h1{
-      margin:0 0 8px 0;
-      font-size:1.6rem;
-      text-align:center;
-      font-weight:700;
-      letter-spacing:0.2px;
-      cursor: pointer;
-      user-select: none;
-      position: absolute;
-      left: 50%;
-      transform: translateX(-50%);
-      top: 8px;
-      z-index: 1;
-      padding: 4px 8px;
-      background: transparent;
-      transition: all 0.2s ease;
-    }
-
-    h1:hover {
-      transform: translateX(-50%) scale(1.05);
-      text-shadow: 0 0 10px rgba(251, 191, 36, 0.5);
-    }
-
-    /* when title text is long wrap gracefully on small screens */
-    @media (max-width:420px){
-      h1{ font-size:1.25rem; position: static; transform:none; text-align:center; margin-top:6px; }
-      .status-badge{ position: static; margin-bottom:8px; }
-      .header-row{ display:flex; flex-direction:column; align-items:center; gap:6px; }
-    }
-
-    /* ===== form layout ===== */
-    .row{display:flex;gap:12px}
-    .col{flex:1}
-    form{margin-top:12px}
-    label{
-      display:block;
-      margin-top:12px;
-      font-weight:600;
-      color:var(--muted);
-      font-size:0.95rem;
-    }
-
-    /* make specified inputs bold visually */
-    input, textarea, select{
-      width:100%;
-      padding:9px 10px;
-      margin-top:6px;
-      border-radius:8px;
-      border:1px solid rgba(255,255,255,0.18);
-      background:var(--input-bg);
-      color:#fff;
-      font-size:14px;
-      outline:none;
-      box-sizing:border-box;
-      transition: all 0.2s ease;
-    }
-
-    input:focus, textarea:focus, select:focus {
-      border-color: var(--accent-yellow);
-      box-shadow: 0 0 0 2px rgba(251, 191, 36, 0.2);
-    }
-
-    input::placeholder, textarea::placeholder { color: rgba(255,255,255,0.75); }
-
-    /* class to bold certain inputs' text */
-    .bold-input{ font-weight:700; color:#fff; }
-
-    /* small file input tweak */
-    input[type="file"]{ padding:6px 8px; background: transparent; }
-
-    .logo-preview, .signature-preview{
-      margin-top:8px;
-      text-align:center;
-    }
-    .logo-preview img, .signature-preview img{
-      max-width:140px;
-      height:auto;
-      border-radius:8px;
-      border:1px solid rgba(255,255,255,0.18);
-      display:block;
-      margin:8px auto 6px;
-      background: rgba(255,255,255,0.06);
-      padding:6px;
-    }
-
-    .remove-btn{
-      margin-top:6px;
-      background: rgba(239,68,68,0.9);
-      color:#fff;
-      padding:7px 10px;
-      border-radius:8px;
-      border:none;
-      cursor:pointer;
-      font-weight:600;
-      transition: all 0.2s ease;
-    }
-
-    .remove-btn:hover{ transform:translateY(-1px); background: rgba(239,68,68,1); }
-
-    .actions{
-      margin-top:18px;
-      display:flex;
-      gap:10px;
-      flex-wrap:wrap;
-    }
-    button{
-      background: rgba(255,255,255,0.18);
-      color:#fff;
-      border:none;
-      padding:10px 14px;
-      border-radius:10px;
-      cursor:pointer;
-      font-weight:700;
-      min-width:150px;
-      transition: all 0.2s ease;
-      position: relative;
-      overflow: hidden;
-    }
-    
-    button:before {
-      content: '';
-      position: absolute;
-      top: 0;
-      left: -100%;
-      width: 100%;
-      height: 100%;
-      background: linear-gradient(90deg, transparent, rgba(255,255,255,0.2), transparent);
-      transition: left 0.5s;
-    }
-    
-    button:hover:before {
-      left: 100%;
-    }
-    
-    button:hover {
-      transform: translateY(-2px);
-      box-shadow: 0 4px 12px rgba(0,0,0,0.15);
-    }
-    
-    button:active {
-      transform: translateY(0);
-    }
-    
-    button:disabled{ opacity:0.5; cursor:default; }
-    
-    button.primary {
-      background: var(--accent-blue);
-    }
-    
-    button.success {
-      background: #22c55e;
-    }
-    
-    button.warning {
-      background: var(--accent-yellow);
-      color: #1e293b;
-    }
-    
-    button.danger {
-      background: #ef4444;
-    }
-
-    /* Hidden admin button */
-    .hidden-admin-btn {
-      opacity: 0;
-      position: absolute;
-      width: 1px;
-      height: 1px;
-      pointer-events: none;
-    }
-
-    .preview{
-      margin-top:18px;
-      padding:12px;
-      border-radius:8px;
-      background: rgba(255,255,255,0.08);
-      border: 1px dashed rgba(255,255,255,0.12);
-      color:#fff;
-    }
-
-    /* Theme toggles */
-    .theme-switcher{ display:flex; gap:8px; justify-content:center; margin-top:12px; }
-    .theme-btn{ 
-      padding:8px 10px; 
-      border-radius:8px; 
-      border:1px solid rgba(255,255,255,0.12); 
-      cursor:pointer; 
-      background:transparent; 
-      color:#fff; 
-      font-weight:700;
-      transition: all 0.2s ease;
-    }
-    .theme-btn.active{ 
-      box-shadow: 0 6px 20px rgba(0,0,0,0.25); 
-      transform:translateY(-2px); 
-      background: var(--accent-blue);
-    }
-
-    /* responsive */
-    @media (max-width:720px){
-      .row{flex-direction:column}
-      .actions{flex-direction:column}
-      button{width:100%}
-    }
-
-    /* ===== modal backdrop ===== */
-    .modal-backdrop {
-      position: fixed;
-      inset: 0;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      background: rgba(0, 0, 0, 0.6);
-      z-index: 9999;
-      opacity: 0;
-      pointer-events: none;
-      transition: opacity 0.18s ease;
-      padding: 18px;
-    }
-    .modal-backdrop.show {
-      opacity: 1;
-      pointer-events: auto;
-    }
-
-    /* activation modal (glass) */
-    .modal {
-      width: 100%;
-      max-width: 640px;
-      border-radius: 12px;
-      padding: 16px;
-      background: linear-gradient(180deg, rgba(255,255,255,0.04), rgba(255,255,255,0.02));
-      border: 1px solid rgba(255,255,255,0.08);
-      color: #fff;
-      box-shadow: 0 12px 40px rgba(0, 0, 0, 0.6);
-      box-sizing: border-box;
-    }
-
-    /* admin panel (fullscreen solid) */
-    .admin-fullscreen {
-      position: fixed;
-      inset: 0;
-      background: var(--admin-bg);
-      color: #fff;
-      z-index: 20000;
-      display: none;
-      padding: 28px;
-      overflow:auto;
-      box-sizing:border-box;
-    }
-    .admin-fullscreen.show { display:block; }
-
-    .admin-header { display:flex; align-items:center; justify-content:space-between; gap:12px; margin-bottom:12px; }
-    .admin-title { font-size:1.4rem; font-weight:700; color:#fff; }
-    .admin-actions { display:flex; gap:8px; align-items:center; }
-
-    .admin-panel-box { 
-      background: #071026; 
-      padding:12px; 
-      border-radius:8px; 
-      border:1px solid rgba(255,255,255,0.04); 
-      margin-bottom: 16px;
-    }
-    
-    .admin-section {
-      margin-bottom: 20px;
-      padding-bottom: 16px;
-      border-bottom: 1px solid rgba(255,255,255,0.06);
-    }
-    
-    .admin-section-title {
-      font-size: 1.2rem;
-      font-weight: 700;
-      margin-bottom: 12px;
-      color: var(--accent-yellow);
-    }
-
-    table.admin-table { width:100%; border-collapse:collapse; margin-top:12px; font-size:0.95rem; color:#fff; }
-    table.admin-table th, table.admin-table td { border:1px solid rgba(255,255,255,0.06); padding:8px; text-align:left; vertical-align:middle; }
-    table.admin-table th { background: rgba(255,255,255,0.03); font-weight:700; color:#fff; }
-
-    .pill { padding:6px 10px; border-radius:999px; background: rgba(255,255,255,0.04); font-weight:700; display:inline-block; color:#fff; }
-    
-    .key-status {
-      display: inline-block;
-      padding: 4px 8px;
-      border-radius: 4px;
-      font-size: 0.8rem;
-      font-weight: 700;
-    }
-    
-    .key-status.active {
-      background: #22c55e;
-      color: white;
-    }
-    
-    .key-status.expired {
-      background: #ef4444;
-      color: white;
-    }
-    
-    .key-status.pending {
-      background: #f59e0b;
-      color: white;
-    }
-
-    /* small screens admin layout */
-    @media (max-width:720px){
-      .admin-header { flex-direction:column; align-items:flex-start; gap:8px; }
-      table.admin-table { font-size:0.8rem; }
-    }
-    
-    /* Trial notification */
-    .trial-notification {
-      background: rgba(251, 191, 36, 0.15);
-      border: 1px solid rgba(251, 191, 36, 0.3);
-      border-radius: 8px;
-      padding: 12px;
-      margin: 12px 0;
-      text-align: center;
-      color: #fff;
-    }
-    
-    .trial-notification strong {
-      color: var(--accent-yellow);
-    }
-    
-    /* Loading spinner */
-    .spinner {
-      display: inline-block;
-      width: 20px;
-      height: 20px;
-      border: 3px solid rgba(255,255,255,0.3);
-      border-radius: 50%;
-      border-top-color: #fff;
-      animation: spin 1s ease-in-out infinite;
-      margin-right: 8px;
-    }
-    
-    @keyframes spin {
-      to { transform: rotate(360deg); }
-    }
-
-    /* Click counter indicator */
-    .click-counter {
-      position: fixed;
-      top: 20px;
-      right: 20px;
-      background: rgba(0,0,0,0.7);
-      color: white;
-      padding: 8px 12px;
-      border-radius: 20px;
-      font-size: 0.8rem;
-      font-weight: bold;
-      z-index: 10000;
-      display: none;
-    }
-  </style>
-</head>
-<body>
-  <!-- Click counter indicator -->
-  <div id="clickCounter" class="click-counter"></div>
-
-  <div class="page-wrap">
-    <div class="container" role="region" aria-label="SmartReceipt Form">
-      <div class="header-row">
-        <h1 id="appTitle">SmartReceipt Pro</h1>
-      </div>
-      <div id="statusBadge" class="status-badge" aria-live="polite">🔒 Pro: Not activated</div>
-      
-      <!-- Trial notification -->
-      <div id="trialNotification" class="trial-notification" style="display: none;">
-        <strong>Free Trial Active</strong> - You have <span id="trialDays">3</span> days remaining. Activate with a license key to continue using Pro features.
-      </div>
-
-      <!-- Theme switcher -->
-      <br>
-      <div class="theme-switcher" aria-hidden="false">
-        <button class="theme-btn active" data-theme="blue" id="themeBlue">Blue & Yellow</button>
-        <button class="theme-btn" data-theme="green" id="themeGreen">Green</button>
-        <button class="theme-btn" data-theme="gold" id="themeGold">Gold</button>
-      </div>
-      
-
-      <form id="receiptForm" autocomplete="off" onsubmit="return false;">
-        <!-- Business details -->
-        <label>Business Name
-          <input id="businessName" placeholder="e.g. KingsNet Web Solutions" required>
-        </label>
-
-        <div class="row">
-          <div class="col">
-            <label>Business Contact
-              <input id="businessContact" placeholder="+233 20 000 0000" required>
-            </label>
-          </div>
-          <div class="col">
-            <label>Business Email
-              <input id="businessEmail" type="email" placeholder="info@business.com" required>
-            </label>
-          </div>
-        </div>
-
-        <!-- Logo upload -->
-        <label>Upload Business Logo
-          <input id="businessLogo" type="file" accept="image/*">
-        </label>
-        <div class="logo-preview" id="logoPreview">No logo uploaded</div>
-
-        <!-- Payer and amounts -->
-        <label style="margin-top:14px;">Payer Name
-          <input id="payerName" class="bold-input" placeholder="Full name of payer" required>
-        </label>
-
-        <div class="row">
-          <div class="col">
-            <label>Total Amount
-              <input id="totalAmount" type="number" class="bold-input" step="0.01" placeholder="Total amount (GHS)" required>
-            </label>
-          </div>
-          <div class="col">
-            <label>Amount Paid
-              <input id="amountPaid" type="number" class="bold-input" step="0.01" placeholder="Amount paid (GHS)" required>
-            </label>
-          </div>
-        </div>
-
-        <div class="row">
-          <div class="col">
-            <label>Arrears
-              <input id="arrears" type="text" class="bold-input" placeholder="Auto-calculated" readonly>
-            </label>
-          </div>
-          <div class="col">
-            <label>Date
-              <input id="date" type="date" class="bold-input">
-            </label>
-          </div>
-        </div>
-
-        <label>Purpose
-          <textarea id="purpose" rows="2" placeholder="Payment for..."></textarea>
-        </label>
-
-        <!-- Signature upload -->
-        <label>Upload Digital Signature
-          <input id="signatureUpload" type="file" accept="image/*">
-        </label>
-        <div class="signature-preview" id="signaturePreview">No signature uploaded</div>
-
-        <!-- Actions -->
-        <div class="actions" role="group" aria-label="actions">
-          <button type="button" id="generate" class="primary">Generate PDF</button>
-          <button type="button" id="download" disabled>Download PDF</button>
-          <button type="button" id="whatsapp" class="success">Share via WhatsApp</button>
-          <button type="button" id="copySummary">Copy Summary</button>
-          <button type="button" id="activateBtnUI" class="warning">Activate to Pro</button>
-          <!-- Hidden Admin Panel Button -->
-          <button type="button" id="adminBtnUI" class="hidden-admin-btn">Admin Panel</button>
-        </div>
-      </form>
-
-      <div id="preview" class="preview">PDF not generated yet.</div>
-    </div>
-  </div>
-
-  <!-- Activation modal -->
-  <div id="proModalBackdrop" class="modal-backdrop" aria-hidden="true">
-    <div class="modal" role="dialog" aria-modal="true" aria-labelledby="proModalTitle">
-      <h2 id="proModalTitle">Activate SmartReceipt Pro</h2>
-
-      <label>Email
-        <input id="licenseEmail" placeholder="you@example.com" type="email" />
-      </label>
-
-      <label>Activation Key
-        <input id="licenseKeyInput" placeholder="e.g. SR-ABCD-EFGH-IJKL" />
-      </label>
-
-      <div style="display:flex;gap:8px;justify-content:center;margin-top:12px;">
-        <button id="modalActivateBtn" class="success">Activate</button>
-        <button id="modalCloseBtn">Close</button>
-      </div>
-
-      <p id="activationMsg" style="text-align:center;margin-top:10px;color:#fca5a5;font-weight:700"></p>
-      <p class="muted" style="margin-top:10px">Enter your email and activation key to unlock Pro features.</p>
-    </div>
-  </div>
-
-  <!-- Admin Login modal -->
-  <div id="adminLoginBackdrop" class="modal-backdrop" aria-hidden="true">
-    <div class="modal" role="dialog" aria-modal="true" aria-labelledby="adminLoginTitle">
-      <h3 id="adminLoginTitle">Admin Login</h3>
-      <p class="muted">Enter admin credentials to access the admin panel.</p>
-      
-      <label>Email
-        <input id="adminEmailInput" type="email" placeholder="admin@example.com" />
-      </label>
-      
-      <label>Password
-        <input id="adminPasswordInput" type="password" placeholder="Enter password" />
-      </label>
-      
-      <div style="display:flex;gap:8px;justify-content:center;margin-top:12px;">
-        <button id="adminLoginSubmit" class="primary">Login</button>
-        <button id="adminLoginClose">Close</button>
-      </div>
-      <p id="adminLoginMsg" style="text-align:center;margin-top:8px;color:#fca5a5;font-weight:700"></p>
-    </div>
-  </div>
-
-  <!-- Admin fullscreen modal (solid background) -->
-  <div id="adminFullscreen" class="admin-fullscreen" aria-hidden="true">
-    <div class="admin-header">
-      <div>
-        <div class="admin-title">Admin — License Manager</div>
-        <div class="muted" style="margin-top:6px;color:rgba(255,255,255,0.85)">Manage keys & activations</div>
-      </div>
-      <div class="admin-actions">
-        <button id="adminLogoutBtn" style="background:#6b7280;color:#fff;border:none;padding:8px 12px;border-radius:8px;font-weight:700">Logout</button>
-        <button id="closeAdminBtn" style="background:#ef4444;color:#fff;border:none;padding:8px 12px;border-radius:8px;font-weight:700">Close</button>
-        <button id="exportDataBtn" class="primary" style="border:none;padding:8px 12px;border-radius:8px;font-weight:700">Export Data</button>
-      </div>
-    </div>
-
-    <div class="admin-section">
-      <div class="admin-section-title">Generate Activation Keys</div>
-      <div class="admin-panel-box">
-        <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">
-          <input id="newKeyEmail" placeholder="user@example.com" style="flex:1;min-width:200px;padding:8px;border-radius:6px;border:1px solid rgba(255,255,255,0.06);background:transparent;color:#fff" />
-          <select id="newKeyDuration" style="padding:8px;border-radius:6px;border:1px solid rgba(255,255,255,0.06);background:transparent;color:#fff">
-            <option value="15">15 days</option>
-            <option value="30" selected>30 days</option>
-            <option value="60">60 days</option>
-          </select>
-          <button id="generateKeyBtn" class="success">Generate Key</button>
-        </div>
-      </div>
-    </div>
-
-    <div class="admin-section">
-      <div class="admin-section-title">Active Licenses</div>
-      <div class="admin-panel-box">
-        <table class="admin-table" style="width:100%;border-collapse:collapse">
-          <thead>
-            <tr style="text-align:left">
-              <th>Email</th>
-              <th>Activation Key</th>
-              <th>Duration</th>
-              <th>Activated</th>
-              <th>Expires</th>
-              <th>Status</th>
-              <th>Actions</th>
-            </tr>
-          </thead>
-          <tbody id="adminKeysList" class="admin-list"></tbody>
-        </table>
-      </div>
-    </div>
-
-    <div class="admin-section">
-      <div class="admin-section-title">User Management</div>
-      <div class="admin-panel-box">
-        <table class="admin-table">
-          <thead>
-            <tr>
-              <th>Email</th>
-              <th>Last Login</th>
-              <th>Status</th>
-            </tr>
-          </thead>
-          <tbody id="usersList"></tbody>
-        </table>
-      </div>
-    </div>
-  </div>
-
-  <script>
-  (function(){
-    // Firebase configuration
-    const firebaseConfig = {
-      apiKey: "AIzaSyCdMifjpX4L5cdkPJZKEZAxgIppUYbS5qk",
-      authDomain: "smartreceipt-52dc9.firebaseapp.com",
-      projectId: "smartreceipt-52dc9",
-      storageBucket: "smartreceipt-52dc9.firebasestorage.app",
-      messagingSenderId: "345183601946",
-      appId: "1:345183601946:web:d7a24e83e4132345cd18a3"
-    };
-
-    // Initialize Firebase with error handling
-    try {
-      firebase.initializeApp(firebaseConfig);
-    } catch (error) {
-      console.log('Firebase already initialized');
-    }
-
-    const db = firebase.firestore();
-    const auth = firebase.auth();
-
-    // Enable offline persistence for better user experience
-    db.enablePersistence()
-      .catch((err) => {
-        console.log('Firestore persistence failed: ', err);
-      });
-
-    // Elements (main)
-    const appTitle = document.getElementById('appTitle');
-    const themeBtns = document.querySelectorAll('.theme-btn');
-    const statusBadge = document.getElementById('statusBadge');
-    const trialNotification = document.getElementById('trialNotification');
-    const trialDays = document.getElementById('trialDays');
-    const clickCounter = document.getElementById('clickCounter');
-
-    // Activation modal
-    const proModalBackdrop = document.getElementById('proModalBackdrop');
-    const licenseEmail = document.getElementById('licenseEmail');
-    const licenseKeyInput = document.getElementById('licenseKeyInput');
-    const modalActivateBtn = document.getElementById('modalActivateBtn');
-    const modalCloseBtn = document.getElementById('modalCloseBtn');
-    const activationMsg = document.getElementById('activationMsg');
-
-    // Admin login modal
-    const adminLoginBackdrop = document.getElementById('adminLoginBackdrop');
-    const adminEmailInput = document.getElementById('adminEmailInput');
-    const adminPasswordInput = document.getElementById('adminPasswordInput');
-    const adminLoginSubmit = document.getElementById('adminLoginSubmit');
-    const adminLoginClose = document.getElementById('adminLoginClose');
-    const adminLoginMsg = document.getElementById('adminLoginMsg');
-
-    // Admin fullscreen
-    const adminFullscreen = document.getElementById('adminFullscreen');
-    const adminKeysList = document.getElementById('adminKeysList');
-    const newKeyEmail = document.getElementById('newKeyEmail');
-    const newKeyDuration = document.getElementById('newKeyDuration');
-    const generateKeyBtn = document.getElementById('generateKeyBtn');
-    const closeAdminBtn = document.getElementById('closeAdminBtn');
-    const adminLogoutBtn = document.getElementById('adminLogoutBtn');
-    const exportDataBtn = document.getElementById('exportDataBtn');
-    const usersList = document.getElementById('usersList');
-
-    // Receipt form elements
-    const generateBtn = document.getElementById('generate');
-    const downloadBtn = document.getElementById('download');
-    const whatsappBtn = document.getElementById('whatsapp');
-    const copyBtn = document.getElementById('copySummary');
-    const activateBtnUI = document.getElementById('activateBtnUI');
-    const adminBtnUI = document.getElementById('adminBtnUI');
-    const preview = document.getElementById('preview');
-
-    const businessNameEl = document.getElementById('businessName');
-    const businessContactEl = document.getElementById('businessContact');
-    const businessEmailEl = document.getElementById('businessEmail');
-    const payerNameEl = document.getElementById('payerName');
-    const totalAmountEl = document.getElementById('totalAmount');
-    const amountPaidEl = document.getElementById('amountPaid');
-    const arrearsEl = document.getElementById('arrears');
-    const dateEl = document.getElementById('date');
-    const purposeEl = document.getElementById('purpose');
-    const businessLogo = document.getElementById('businessLogo');
-    const logoPreview = document.getElementById('logoPreview');
-    const signatureUpload = document.getElementById('signatureUpload');
-    const signaturePreview = document.getElementById('signaturePreview');
-
-    // State & storage keys
-    const LS_ACTIVE = "sr_activeLicense";
-    const LS_TRIAL_START = "sr_trialStart";
-    const TRIAL_DAYS = 3;
-
-    // Admin access variables
-    let clickCount = 0;
-    let clickTimeout = null;
-    const REQUIRED_CLICKS = 4;
-    const CLICK_TIMEOUT_MS = 2000; // 2 seconds to complete all clicks
-
-    // Default date to today
-    dateEl.value = new Date().toISOString().slice(0,10);
-
-    // Initialize trial period
-    function initializeTrial() {
-      if (!localStorage.getItem(LS_TRIAL_START)) {
-        localStorage.setItem(LS_TRIAL_START, new Date().toISOString());
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width,initial-scale=1" />
+    <title>SmartReceipt Pro</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+    <!-- Firebase SDK -->
+    <script src="https://www.gstatic.com/firebasejs/9.22.1/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.22.1/firebase-firestore-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.22.1/firebase-auth-compat.js"></script>
+
+    <style>
+      /* ===== Theme variables (updated by JS theme switcher) ===== */
+      :root {
+        --grad1: #1e3a8a; /* Dark blue */
+        --grad2: #3b82f6; /* Medium blue */
+        --grad3: #fbbf24; /* Yellow accent */
+        --glass-bg: rgba(255, 255, 255, 0.12);
+        --glass-border: rgba(255, 255, 255, 0.25);
+        --input-bg: rgba(255, 255, 255, 0.18);
+        --muted: rgba(255, 255, 255, 0.85);
+        --admin-bg: #0b1220; /* solid admin background */
+        --accent-yellow: #fbbf24;
+        --accent-blue: #3b82f6;
       }
-      
-      const trialStart = new Date(localStorage.getItem(LS_TRIAL_START));
-      const trialEnd = new Date(trialStart.getTime() + (TRIAL_DAYS * 24 * 60 * 60 * 1000));
-      const now = new Date();
-      
-      if (now < trialEnd) {
-        // Trial is active
-        const daysLeft = Math.ceil((trialEnd - now) / (24 * 60 * 60 * 1000));
-        trialDays.textContent = daysLeft;
-        trialNotification.style.display = 'block';
-      } else {
-        // Trial expired
-        trialNotification.style.display = 'none';
-        // Check if user has active license
-        if (!getCurrentActivation()) {
-          // Disable pro features
-          disableProFeatures();
+
+      /* Make page always scrollable, avoid header jumping on mobile keyboard */
+      html,
+      body {
+        height: 100%;
+      }
+      body {
+        margin: 0;
+        font-family: Inter, system-ui, -apple-system, "Segoe UI", Roboto,
+          "Helvetica Neue", Arial;
+        -webkit-font-smoothing: antialiased;
+        -moz-osx-font-smoothing: grayscale;
+        background: linear-gradient(
+          135deg,
+          var(--grad1),
+          var(--grad2),
+          var(--grad3)
+        );
+        background-size: 400% 400%;
+        animation: gradientShift 10s ease infinite;
+        display: block;
+        min-height: 100vh;
+        padding: 28px; /* give space for keyboard on mobile */
+        box-sizing: border-box;
+      }
+      @keyframes gradientShift {
+        0% {
+          background-position: 0% 50%;
+        }
+        50% {
+          background-position: 100% 50%;
+        }
+        100% {
+          background-position: 0% 50%;
         }
       }
-    }
 
-    // Disable pro features when trial expires and no license
-    function disableProFeatures() {
-      // Add logic to disable premium features here
-      statusBadge.textContent = "🔒 Trial Expired - Activate Pro";
-      statusBadge.style.background = "rgba(239,68,68,0.2)";
-    }
-
-    // Admin access click handler
-    function handleAdminAccessClick() {
-      // Clear existing timeout
-      if (clickTimeout) {
-        clearTimeout(clickTimeout);
+      /* central wrapper to center container but allow page scrolling */
+      .page-wrap {
+        display: flex;
+        justify-content: center;
+        align-items: flex-start; /* prevents container from jumping up when keyboard opens */
+        width: 100%;
+        margin: 0 auto;
       }
 
-      // Increment click count
-      clickCount++;
-      
-      // Update click counter display
-      clickCounter.textContent = `${clickCount}/${REQUIRED_CLICKS}`;
-      clickCounter.style.display = 'block';
-      
-      // Add visual feedback
-      appTitle.style.transform = 'translateX(-50%) scale(1.1)';
-      appTitle.style.color = '#fbbf24';
-      appTitle.style.textShadow = '0 0 15px rgba(251, 191, 36, 0.8)';
-      
-      setTimeout(() => {
-        appTitle.style.transform = 'translateX(-50%) scale(1)';
-        appTitle.style.color = '';
-        appTitle.style.textShadow = '';
-      }, 200);
-
-      // Check if we reached the required number of clicks
-      if (clickCount >= REQUIRED_CLICKS) {
-        // Reset counter
-        clickCount = 0;
-        clickCounter.style.display = 'none';
-        
-        // Show admin login
-        showAdminLogin();
-        
-        // Success animation
-        appTitle.style.transform = 'translateX(-50%) scale(1.2)';
-        appTitle.style.color = '#22c55e';
-        appTitle.style.textShadow = '0 0 20px rgba(34, 197, 94, 1)';
-        
-        setTimeout(() => {
-          appTitle.style.transform = 'translateX(-50%) scale(1)';
-          appTitle.style.color = '';
-          appTitle.style.textShadow = '';
-        }, 1000);
-      } else {
-        // Set timeout to reset counter if user doesn't complete in time
-        clickTimeout = setTimeout(() => {
-          clickCount = 0;
-          clickCounter.style.display = 'none';
-          
-          // Reset animation
-          appTitle.style.transform = 'translateX(-50%) scale(1)';
-          appTitle.style.color = '';
-          appTitle.style.textShadow = '';
-        }, CLICK_TIMEOUT_MS);
+      /* ===== Glass card ===== */
+      .container {
+        width: 92%;
+        max-width: 980px;
+        padding: 28px;
+        border-radius: 18px;
+        background: var(--glass-bg);
+        box-shadow: 0 12px 45px rgba(0, 0, 0, 0.3);
+        border: 1px solid var(--glass-border);
+        backdrop-filter: blur(18px) saturate(120%);
+        -webkit-backdrop-filter: blur(18px) saturate(120%);
+        color: #fff;
+        box-sizing: border-box;
+        margin-bottom: 32px;
+        position: relative;
       }
-    }
 
-    // Theme switcher
-    function setTheme(theme){
-      themeBtns.forEach(b => b.classList.remove('active'));
-      if(theme === 'green'){
-        document.getElementById('themeGreen').classList.add('active');
-        document.documentElement.style.setProperty('--grad1', '#059669');
-        document.documentElement.style.setProperty('--grad2', '#10b981');
-        document.documentElement.style.setProperty('--grad3', '#06b6d4');
-        document.documentElement.style.setProperty('--accent-yellow', '#f59e0b');
-        document.documentElement.style.setProperty('--accent-blue', '#3b82f6');
-      } else if(theme === 'gold'){
-        document.getElementById('themeGold').classList.add('active');
-        document.documentElement.style.setProperty('--grad1', '#d97706');
-        document.documentElement.style.setProperty('--grad2', '#f59e0b');
-        document.documentElement.style.setProperty('--grad3', '#eab308');
-        document.documentElement.style.setProperty('--accent-yellow', '#eab308');
-        document.documentElement.style.setProperty('--accent-blue', '#3b82f6');
-      } else {
-        document.getElementById('themeBlue').classList.add('active');
-        document.documentElement.style.setProperty('--grad1', '#1e3a8a');
-        document.documentElement.style.setProperty('--grad2', '#3b82f6');
-        document.documentElement.style.setProperty('--grad3', '#fbbf24');
-        document.documentElement.style.setProperty('--accent-yellow', '#fbbf24');
-        document.documentElement.style.setProperty('--accent-blue', '#3b82f6');
+      /* ===== header area: status badge + title (fixed layout to prevent overlap) ===== */
+      .header-row {
+        display: block;
+        position: relative;
+        padding: 6px 0 12px 0;
       }
-    }
-    themeBtns.forEach(btn => btn.addEventListener('click', ()=> setTheme(btn.dataset.theme)));
-    setTheme('blue');
 
-    // File preview helper
-    function setupFilePreview(inputEl, previewEl, setDataFn, opt = {maxWidth:140}) {
-      inputEl.addEventListener('change', function(){
-        const file = this.files && this.files[0];
-        if(!file){ setDataFn(null); previewEl.textContent = 'No image uploaded'; return; }
-        const reader = new FileReader();
-        reader.onload = e => {
-          const dataURL = e.target.result;
-          setDataFn(dataURL);
-          previewEl.innerHTML = '';
-          const img = document.createElement('img');
-          img.src = dataURL;
-          img.alt = 'Preview';
-          img.style.maxWidth = (opt.maxWidth || 140) + 'px';
-          previewEl.appendChild(img);
+      /* status badge is anchored left */
+      .status-badge {
+        position: absolute;
+        left: 16px;
+        top: 6px;
+        background: rgba(255, 255, 255, 0.06);
+        padding: 8px 12px;
+        border-radius: 12px;
+        font-weight: 700;
+        font-size: 0.88rem;
+        white-space: nowrap;
+        z-index: 2;
+        border-left: 3px solid var(--accent-yellow);
+      }
 
-          const removeBtn = document.createElement('button');
-          removeBtn.type = 'button';
-          removeBtn.className = 'remove-btn';
-          removeBtn.innerText = 'Remove';
-          removeBtn.onclick = ()=>{
-            setDataFn(null);
-            inputEl.value = '';
-            previewEl.textContent = 'No image uploaded';
-          };
-          previewEl.appendChild(removeBtn);
+      /* title is centered using absolute centering (left:50% + transform) so badge doesn't push it */
+      h1 {
+        margin: 0 0 8px 0;
+        font-size: 1.6rem;
+        text-align: center;
+        font-weight: 700;
+        letter-spacing: 0.2px;
+        cursor: pointer;
+        user-select: none;
+        position: absolute;
+        left: 50%;
+        transform: translateX(-50%);
+        top: 8px;
+        z-index: 1;
+        padding: 4px 8px;
+        background: transparent;
+        transition: all 0.2s ease;
+      }
+
+      h1:hover {
+        transform: translateX(-50%) scale(1.05);
+        text-shadow: 0 0 10px rgba(251, 191, 36, 0.5);
+      }
+
+      /* when title text is long wrap gracefully on small screens */
+      @media (max-width: 420px) {
+        h1 {
+          font-size: 1.25rem;
+          position: static;
+          transform: none;
+          text-align: center;
+          margin-top: 6px;
+        }
+        .status-badge {
+          position: static;
+          margin-bottom: 8px;
+        }
+        .header-row {
+          display: flex;
+          flex-direction: column;
+          align-items: center;
+          gap: 6px;
+        }
+      }
+
+      /* ===== form layout ===== */
+      .row {
+        display: flex;
+        gap: 12px;
+      }
+      .col {
+        flex: 1;
+      }
+      form {
+        margin-top: 12px;
+      }
+      label {
+        display: block;
+        margin-top: 12px;
+        font-weight: 600;
+        color: var(--muted);
+        font-size: 0.95rem;
+      }
+
+      /* make specified inputs bold visually */
+      input,
+      textarea,
+      select {
+        width: 100%;
+        padding: 9px 10px;
+        margin-top: 6px;
+        border-radius: 8px;
+        border: 1px solid rgba(255, 255, 255, 0.18);
+        background: var(--input-bg);
+        color: #fff;
+        font-size: 14px;
+        outline: none;
+        box-sizing: border-box;
+        transition: all 0.2s ease;
+      }
+
+      input:focus,
+      textarea:focus,
+      select:focus {
+        border-color: var(--accent-yellow);
+        box-shadow: 0 0 0 2px rgba(251, 191, 36, 0.2);
+      }
+
+      input::placeholder,
+      textarea::placeholder {
+        color: rgba(255, 255, 255, 0.75);
+      }
+
+      /* class to bold certain inputs' text */
+      .bold-input {
+        font-weight: 700;
+        color: #fff;
+      }
+
+      /* small file input tweak */
+      input[type="file"] {
+        padding: 6px 8px;
+        background: transparent;
+      }
+
+      .logo-preview,
+      .signature-preview {
+        margin-top: 8px;
+        text-align: center;
+      }
+      .logo-preview img,
+      .signature-preview img {
+        max-width: 140px;
+        height: auto;
+        border-radius: 8px;
+        border: 1px solid rgba(255, 255, 255, 0.18);
+        display: block;
+        margin: 8px auto 6px;
+        background: rgba(255, 255, 255, 0.06);
+        padding: 6px;
+      }
+
+      .remove-btn {
+        margin-top: 6px;
+        background: rgba(239, 68, 68, 0.9);
+        color: #fff;
+        padding: 7px 10px;
+        border-radius: 8px;
+        border: none;
+        cursor: pointer;
+        font-weight: 600;
+        transition: all 0.2s ease;
+      }
+
+      .remove-btn:hover {
+        transform: translateY(-1px);
+        background: rgba(239, 68, 68, 1);
+      }
+
+      .actions {
+        margin-top: 18px;
+        display: flex;
+        gap: 10px;
+        flex-wrap: wrap;
+      }
+      button {
+        background: rgba(255, 255, 255, 0.18);
+        color: #fff;
+        border: none;
+        padding: 10px 14px;
+        border-radius: 10px;
+        cursor: pointer;
+        font-weight: 700;
+        min-width: 150px;
+        transition: all 0.2s ease;
+        position: relative;
+        overflow: hidden;
+      }
+
+      button:before {
+        content: "";
+        position: absolute;
+        top: 0;
+        left: -100%;
+        width: 100%;
+        height: 100%;
+        background: linear-gradient(
+          90deg,
+          transparent,
+          rgba(255, 255, 255, 0.2),
+          transparent
+        );
+        transition: left 0.5s;
+      }
+
+      button:hover:before {
+        left: 100%;
+      }
+
+      button:hover {
+        transform: translateY(-2px);
+        box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+      }
+
+      button:active {
+        transform: translateY(0);
+      }
+
+      button:disabled {
+        opacity: 0.5;
+        cursor: default;
+      }
+
+      button.primary {
+        background: var(--accent-blue);
+      }
+
+      button.success {
+        background: #22c55e;
+      }
+
+      button.warning {
+        background: var(--accent-yellow);
+        color: #1e293b;
+      }
+
+      button.danger {
+        background: #ef4444;
+      }
+
+      /* Hidden admin button */
+      .hidden-admin-btn {
+        opacity: 0;
+        position: absolute;
+        width: 1px;
+        height: 1px;
+        pointer-events: none;
+      }
+
+      .preview {
+        margin-top: 18px;
+        padding: 12px;
+        border-radius: 8px;
+        background: rgba(255, 255, 255, 0.08);
+        border: 1px dashed rgba(255, 255, 255, 0.12);
+        color: #fff;
+      }
+
+      /* Theme toggles */
+      .theme-switcher {
+        display: flex;
+        gap: 8px;
+        justify-content: center;
+        margin-top: 12px;
+      }
+      .theme-btn {
+        padding: 8px 10px;
+        border-radius: 8px;
+        border: 1px solid rgba(255, 255, 255, 0.12);
+        cursor: pointer;
+        background: transparent;
+        color: #fff;
+        font-weight: 700;
+        transition: all 0.2s ease;
+      }
+      .theme-btn.active {
+        box-shadow: 0 6px 20px rgba(0, 0, 0, 0.25);
+        transform: translateY(-2px);
+        background: var(--accent-blue);
+      }
+
+      /* responsive */
+      @media (max-width: 720px) {
+        .row {
+          flex-direction: column;
+        }
+        .actions {
+          flex-direction: column;
+        }
+        button {
+          width: 100%;
+        }
+      }
+
+      /* ===== modal backdrop ===== */
+      .modal-backdrop {
+        position: fixed;
+        inset: 0;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        background: rgba(0, 0, 0, 0.6);
+        z-index: 9999;
+        opacity: 0;
+        pointer-events: none;
+        transition: opacity 0.18s ease;
+        padding: 18px;
+      }
+      .modal-backdrop.show {
+        opacity: 1;
+        pointer-events: auto;
+      }
+
+      /* activation modal (glass) */
+      .modal {
+        width: 100%;
+        max-width: 640px;
+        border-radius: 12px;
+        padding: 16px;
+        background: linear-gradient(
+          180deg,
+          rgba(255, 255, 255, 0.04),
+          rgba(255, 255, 255, 0.02)
+        );
+        border: 1px solid rgba(255, 255, 255, 0.08);
+        color: #fff;
+        box-shadow: 0 12px 40px rgba(0, 0, 0, 0.6);
+        box-sizing: border-box;
+      }
+
+      /* admin panel (fullscreen solid) */
+      .admin-fullscreen {
+        position: fixed;
+        inset: 0;
+        background: var(--admin-bg);
+        color: #fff;
+        z-index: 20000;
+        display: none;
+        padding: 28px;
+        overflow: auto;
+        box-sizing: border-box;
+      }
+      .admin-fullscreen.show {
+        display: block;
+      }
+
+      .admin-header {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 12px;
+        margin-bottom: 12px;
+      }
+      .admin-title {
+        font-size: 1.4rem;
+        font-weight: 700;
+        color: #fff;
+      }
+      .admin-actions {
+        display: flex;
+        gap: 8px;
+        align-items: center;
+      }
+
+      .admin-panel-box {
+        background: #071026;
+        padding: 12px;
+        border-radius: 8px;
+        border: 1px solid rgba(255, 255, 255, 0.04);
+        margin-bottom: 16px;
+      }
+
+      .admin-section {
+        margin-bottom: 20px;
+        padding-bottom: 16px;
+        border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+      }
+
+      .admin-section-title {
+        font-size: 1.2rem;
+        font-weight: 700;
+        margin-bottom: 12px;
+        color: var(--accent-yellow);
+      }
+
+      table.admin-table {
+        width: 100%;
+        border-collapse: collapse;
+        margin-top: 12px;
+        font-size: 0.95rem;
+        color: #fff;
+      }
+      table.admin-table th,
+      table.admin-table td {
+        border: 1px solid rgba(255, 255, 255, 0.06);
+        padding: 8px;
+        text-align: left;
+        vertical-align: middle;
+      }
+      table.admin-table th {
+        background: rgba(255, 255, 255, 0.03);
+        font-weight: 700;
+        color: #fff;
+      }
+
+      .pill {
+        padding: 6px 10px;
+        border-radius: 999px;
+        background: rgba(255, 255, 255, 0.04);
+        font-weight: 700;
+        display: inline-block;
+        color: #fff;
+      }
+
+      .key-status {
+        display: inline-block;
+        padding: 4px 8px;
+        border-radius: 4px;
+        font-size: 0.8rem;
+        font-weight: 700;
+      }
+
+      .key-status.active {
+        background: #22c55e;
+        color: white;
+      }
+
+      .key-status.expired {
+        background: #ef4444;
+        color: white;
+      }
+
+      .key-status.pending {
+        background: #f59e0b;
+        color: white;
+      }
+
+      /* small screens admin layout */
+      @media (max-width: 720px) {
+        .admin-header {
+          flex-direction: column;
+          align-items: flex-start;
+          gap: 8px;
+        }
+        table.admin-table {
+          font-size: 0.8rem;
+        }
+      }
+
+      /* Trial notification */
+      .trial-notification {
+        background: rgba(251, 191, 36, 0.15);
+        border: 1px solid rgba(251, 191, 36, 0.3);
+        border-radius: 8px;
+        padding: 12px;
+        margin: 12px 0;
+        text-align: center;
+        color: #fff;
+      }
+
+      .trial-notification strong {
+        color: var(--accent-yellow);
+      }
+
+      /* Loading spinner */
+      .spinner {
+        display: inline-block;
+        width: 20px;
+        height: 20px;
+        border: 3px solid rgba(255, 255, 255, 0.3);
+        border-radius: 50%;
+        border-top-color: #fff;
+        animation: spin 1s ease-in-out infinite;
+        margin-right: 8px;
+      }
+
+      @keyframes spin {
+        to {
+          transform: rotate(360deg);
+        }
+      }
+
+      /* Click counter indicator */
+      .click-counter {
+        position: fixed;
+        top: 20px;
+        right: 20px;
+        background: rgba(0, 0, 0, 0.7);
+        color: white;
+        padding: 8px 12px;
+        border-radius: 20px;
+        font-size: 0.8rem;
+        font-weight: bold;
+        z-index: 10000;
+        display: none;
+      }
+    </style>
+  </head>
+  <body>
+    <!-- Click counter indicator -->
+    <div id="clickCounter" class="click-counter"></div>
+
+    <div class="page-wrap">
+      <div class="container" role="region" aria-label="SmartReceipt Form">
+        <div class="header-row">
+          <h1 id="appTitle">SmartReceipt Pro</h1>
+        </div>
+        <div id="statusBadge" class="status-badge" aria-live="polite">
+          🔒 Pro: Not activated
+        </div>
+
+        <!-- Trial notification -->
+        <div
+          id="trialNotification"
+          class="trial-notification"
+          style="display: none"
+        >
+          <strong>Free Trial Active</strong> - You have
+          <span id="trialDays">3</span> days remaining. Activate with a license
+          key to continue using Pro features.
+        </div>
+
+        <!-- Theme switcher -->
+        <br />
+        <div class="theme-switcher" aria-hidden="false">
+          <button class="theme-btn active" data-theme="blue" id="themeBlue">
+            Blue & Yellow
+          </button>
+          <button class="theme-btn" data-theme="green" id="themeGreen">
+            Green
+          </button>
+          <button class="theme-btn" data-theme="gold" id="themeGold">
+            Gold
+          </button>
+        </div>
+
+        <form id="receiptForm" autocomplete="off" onsubmit="return false;">
+          <!-- Business details -->
+          <label
+            >Business Name
+            <input
+              id="businessName"
+              placeholder="e.g. KingsNet Web Solutions"
+              required
+            />
+          </label>
+
+          <div class="row">
+            <div class="col">
+              <label
+                >Business Contact
+                <input
+                  id="businessContact"
+                  placeholder="+233 20 000 0000"
+                  required
+                />
+              </label>
+            </div>
+            <div class="col">
+              <label
+                >Business Email
+                <input
+                  id="businessEmail"
+                  type="email"
+                  placeholder="info@business.com"
+                  required
+                />
+              </label>
+            </div>
+          </div>
+
+          <!-- Logo upload -->
+          <label
+            >Upload Business Logo
+            <input id="businessLogo" type="file" accept="image/*" />
+          </label>
+          <div class="logo-preview" id="logoPreview">No logo uploaded</div>
+
+          <!-- Payer and amounts -->
+          <label style="margin-top: 14px"
+            >Payer Name
+            <input
+              id="payerName"
+              class="bold-input"
+              placeholder="Full name of payer"
+              required
+            />
+          </label>
+
+          <div class="row">
+            <div class="col">
+              <label
+                >Total Amount
+                <input
+                  id="totalAmount"
+                  type="number"
+                  class="bold-input"
+                  step="0.01"
+                  placeholder="Total amount (GHS)"
+                  required
+                />
+              </label>
+            </div>
+            <div class="col">
+              <label
+                >Amount Paid
+                <input
+                  id="amountPaid"
+                  type="number"
+                  class="bold-input"
+                  step="0.01"
+                  placeholder="Amount paid (GHS)"
+                  required
+                />
+              </label>
+            </div>
+          </div>
+
+          <div class="row">
+            <div class="col">
+              <label
+                >Arrears
+                <input
+                  id="arrears"
+                  type="text"
+                  class="bold-input"
+                  placeholder="Auto-calculated"
+                  readonly
+                />
+              </label>
+            </div>
+            <div class="col">
+              <label
+                >Date
+                <input id="date" type="date" class="bold-input" />
+              </label>
+            </div>
+          </div>
+
+          <label
+            >Purpose
+            <textarea
+              id="purpose"
+              rows="2"
+              placeholder="Payment for..."
+            ></textarea>
+          </label>
+
+          <!-- Signature upload -->
+          <label
+            >Upload Digital Signature
+            <input id="signatureUpload" type="file" accept="image/*" />
+          </label>
+          <div class="signature-preview" id="signaturePreview">
+            No signature uploaded
+          </div>
+
+          <!-- Actions -->
+          <div class="actions" role="group" aria-label="actions">
+            <button type="button" id="generate" class="primary">
+              Generate PDF
+            </button>
+            <button type="button" id="download" disabled>Download PDF</button>
+            <button type="button" id="whatsapp" class="success">
+              Share via WhatsApp
+            </button>
+            <button type="button" id="copySummary">Copy Summary</button>
+            <button type="button" id="activateBtnUI" class="warning">
+              Activate to Pro
+            </button>
+            <!-- Hidden Admin Panel Button -->
+            <button type="button" id="adminBtnUI" class="hidden-admin-btn">
+              Admin Panel
+            </button>
+          </div>
+        </form>
+
+        <div id="preview" class="preview">PDF not generated yet.</div>
+      </div>
+    </div>
+
+    <!-- Activation modal -->
+    <div id="proModalBackdrop" class="modal-backdrop" aria-hidden="true">
+      <div
+        class="modal"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="proModalTitle"
+      >
+        <h2 id="proModalTitle">Activate SmartReceipt Pro</h2>
+
+        <label
+          >Email
+          <input id="licenseEmail" placeholder="you@example.com" type="email" />
+        </label>
+
+        <label
+          >Activation Key
+          <input id="licenseKeyInput" placeholder="e.g. SR-ABCD-EFGH-IJKL" />
+        </label>
+
+        <div
+          style="
+            display: flex;
+            gap: 8px;
+            justify-content: center;
+            margin-top: 12px;
+          "
+        >
+          <button id="modalActivateBtn" class="success">Activate</button>
+          <button id="modalCloseBtn">Close</button>
+        </div>
+
+        <p
+          id="activationMsg"
+          style="
+            text-align: center;
+            margin-top: 10px;
+            color: #fca5a5;
+            font-weight: 700;
+          "
+        ></p>
+        <p class="muted" style="margin-top: 10px">
+          Enter your email and activation key to unlock Pro features.
+        </p>
+      </div>
+    </div>
+
+    <!-- Admin Login modal -->
+    <div id="adminLoginBackdrop" class="modal-backdrop" aria-hidden="true">
+      <div
+        class="modal"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="adminLoginTitle"
+      >
+        <h3 id="adminLoginTitle">Admin Login</h3>
+        <p class="muted">Enter admin credentials to access the admin panel.</p>
+
+        <label
+          >Email
+          <input
+            id="adminEmailInput"
+            type="email"
+            placeholder="admin@example.com"
+          />
+        </label>
+
+        <label
+          >Password
+          <input
+            id="adminPasswordInput"
+            type="password"
+            placeholder="Enter password"
+          />
+        </label>
+
+        <div
+          style="
+            display: flex;
+            gap: 8px;
+            justify-content: center;
+            margin-top: 12px;
+          "
+        >
+          <button id="adminLoginSubmit" class="primary">Login</button>
+          <button id="adminLoginClose">Close</button>
+        </div>
+        <p
+          id="adminLoginMsg"
+          style="
+            text-align: center;
+            margin-top: 8px;
+            color: #fca5a5;
+            font-weight: 700;
+          "
+        ></p>
+      </div>
+    </div>
+
+    <!-- Admin fullscreen modal (solid background) -->
+    <div id="adminFullscreen" class="admin-fullscreen" aria-hidden="true">
+      <div class="admin-header">
+        <div>
+          <div class="admin-title">Admin — License Manager</div>
+          <div
+            class="muted"
+            style="margin-top: 6px; color: rgba(255, 255, 255, 0.85)"
+          >
+            Manage keys & activations
+          </div>
+        </div>
+        <div class="admin-actions">
+          <button
+            id="adminLogoutBtn"
+            style="
+              background: #6b7280;
+              color: #fff;
+              border: none;
+              padding: 8px 12px;
+              border-radius: 8px;
+              font-weight: 700;
+            "
+          >
+            Logout
+          </button>
+          <button
+            id="closeAdminBtn"
+            style="
+              background: #ef4444;
+              color: #fff;
+              border: none;
+              padding: 8px 12px;
+              border-radius: 8px;
+              font-weight: 700;
+            "
+          >
+            Close
+          </button>
+          <button
+            id="exportDataBtn"
+            class="primary"
+            style="
+              border: none;
+              padding: 8px 12px;
+              border-radius: 8px;
+              font-weight: 700;
+            "
+          >
+            Export Data
+          </button>
+        </div>
+      </div>
+
+      <div class="admin-section">
+        <div class="admin-section-title">Generate Activation Keys</div>
+        <div class="admin-panel-box">
+          <div
+            style="
+              display: flex;
+              gap: 8px;
+              flex-wrap: wrap;
+              align-items: center;
+            "
+          >
+            <input
+              id="newKeyEmail"
+              placeholder="user@example.com"
+              style="
+                flex: 1;
+                min-width: 200px;
+                padding: 8px;
+                border-radius: 6px;
+                border: 1px solid rgba(255, 255, 255, 0.06);
+                background: transparent;
+                color: #fff;
+              "
+            />
+            <select
+              id="newKeyDuration"
+              style="
+                padding: 8px;
+                border-radius: 6px;
+                border: 1px solid rgba(255, 255, 255, 0.06);
+                background: transparent;
+                color: #fff;
+              "
+            >
+              <option value="15">15 days</option>
+              <option value="30" selected>30 days</option>
+              <option value="60">60 days</option>
+            </select>
+            <button id="generateKeyBtn" class="success">Generate Key</button>
+          </div>
+        </div>
+      </div>
+
+      <div class="admin-section">
+        <div class="admin-section-title">Active Licenses</div>
+        <div class="admin-panel-box">
+          <table
+            class="admin-table"
+            style="width: 100%; border-collapse: collapse"
+          >
+            <thead>
+              <tr style="text-align: left">
+                <th>Email</th>
+                <th>Activation Key</th>
+                <th>Duration</th>
+                <th>Activated</th>
+                <th>Expires</th>
+                <th>Status</th>
+                <th>Actions</th>
+              </tr>
+            </thead>
+            <tbody id="adminKeysList" class="admin-list"></tbody>
+          </table>
+        </div>
+      </div>
+
+      <div class="admin-section">
+        <div class="admin-section-title">User Management</div>
+        <div class="admin-panel-box">
+          <table class="admin-table">
+            <thead>
+              <tr>
+                <th>Email</th>
+                <th>Last Login</th>
+                <th>Status</th>
+              </tr>
+            </thead>
+            <tbody id="usersList"></tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
+    <script>
+      (function () {
+        // Firebase configuration
+        const firebaseConfig = {
+          apiKey: "AIzaSyCdMifjpX4L5cdkPJZKEZAxgIppUYbS5qk",
+          authDomain: "smartreceipt-52dc9.firebaseapp.com",
+          projectId: "smartreceipt-52dc9",
+          storageBucket: "smartreceipt-52dc9.firebasestorage.app",
+          messagingSenderId: "345183601946",
+          appId: "1:345183601946:web:d7a24e83e4132345cd18a3",
         };
-        reader.readAsDataURL(file);
-      });
-    }
 
-    let logoDataURL = null;
-    let signatureDataURL = null;
-    setupFilePreview(businessLogo, logoPreview, v => logoDataURL = v, {maxWidth:140});
-    setupFilePreview(signatureUpload, signaturePreview, v => signatureDataURL = v, {maxWidth:160});
-
-    // Arrears auto-calc: arrears = total - paid
-    function updateArrears(){
-      const total = parseFloat(totalAmountEl.value) || 0;
-      const paid = parseFloat(amountPaidEl.value) || 0;
-      const diff = (total - paid);
-      arrearsEl.value = diff.toFixed(2);
-    }
-    totalAmountEl.addEventListener('input', updateArrears);
-    amountPaidEl.addEventListener('input', updateArrears);
-
-    // Generate SR-XXXX-XXXX-XXXX
-    function generateSRKey() {
-      const chunk = () => Math.random().toString(36).substr(2,5).toUpperCase().replace(/[^A-Z0-9]/g,'A').padEnd(5,'A');
-      return `SR-${chunk()}-${chunk()}-${chunk()}`;
-    }
-
-    // Update status badge based on active license
-    function isActivationValid(rec){
-      if(!rec || !rec.expiresAt) return false;
-      return new Date(rec.expiresAt).getTime() > Date.now();
-    }
-    
-    function getCurrentActivation(){
-      try {
-        const raw = localStorage.getItem(LS_ACTIVE);
-        if(!raw) return null;
-        const cur = JSON.parse(raw);
-        if(isActivationValid(cur)) return cur;
-      } catch(e){}
-      return null;
-    }
-    
-    function updateStatusBadge(){
-      const cur = getCurrentActivation();
-      if(cur && isActivationValid(cur)){
-        const daysLeft = Math.ceil((new Date(cur.expiresAt).getTime() - Date.now())/(24*3600*1000));
-        statusBadge.textContent = `🔓 Pro — ${cur.email} (${daysLeft} day${daysLeft!==1?'s':''} left)`;
-        statusBadge.style.background = "rgba(34,197,94,0.2)";
-        trialNotification.style.display = 'none';
-      } else {
-        // Check if trial is active
-        const trialStart = localStorage.getItem(LS_TRIAL_START);
-        if (trialStart) {
-          const trialEnd = new Date(new Date(trialStart).getTime() + (TRIAL_DAYS * 24 * 60 * 60 * 1000));
-          if (new Date() < trialEnd) {
-            const daysLeft = Math.ceil((trialEnd - new Date()) / (24 * 60 * 60 * 1000));
-            statusBadge.textContent = `🔓 Trial — ${daysLeft} day${daysLeft!==1?'s':''} left`;
-            statusBadge.style.background = "rgba(251,191,36,0.2)";
-          } else {
-            statusBadge.textContent = `🔒 Trial Expired - Activate Pro`;
-            statusBadge.style.background = "rgba(239,68,68,0.2)";
-          }
-        } else {
-          statusBadge.textContent = `🔒 Pro: Not activated`;
-          statusBadge.style.background = "rgba(255,255,255,0.06)";
-        }
-      }
-    }
-
-    // Enhanced license activation function
-    async function activateLicense(email, key) {
-      try {
-        // Add rate limiting check
-        const activationAttempts = localStorage.getItem('activationAttempts') || 0;
-        if (activationAttempts > 5) {
-          throw new Error('Too many activation attempts. Please try again later.');
+        // Initialize Firebase with error handling
+        try {
+          firebase.initializeApp(firebaseConfig);
+        } catch (error) {
+          console.log("Firebase already initialized");
         }
 
-        const querySnapshot = await db.collection('licenses')
-          .where('key', '==', key.trim().toUpperCase())
-          .where('email', '==', email.toLowerCase().trim())
-          .get();
+        const db = firebase.firestore();
+        const auth = firebase.auth();
 
-        if (querySnapshot.empty) {
-          localStorage.setItem('activationAttempts', parseInt(activationAttempts) + 1);
-          throw new Error('Invalid activation key or email');
-        }
-
-        const doc = querySnapshot.docs[0];
-        const license = doc.data();
-
-        // Check if license is already activated
-        if (license.activatedAt && isLicenseValid(license)) {
-          // License already active and valid
-          saveLicenseLocally(license, doc.id);
-          return { success: true, message: 'License activated successfully' };
-        }
-
-        if (license.activatedAt) {
-          throw new Error('This license has already been used');
-        }
-
-        // Activate the license
-        const now = new Date();
-        const expiresAt = new Date(now.getTime() + license.durationDays * 24 * 60 * 60 * 1000);
-
-        await db.collection('licenses').doc(doc.id).update({
-          activatedAt: firebase.firestore.Timestamp.fromDate(now),
-          expiresAt: firebase.firestore.Timestamp.fromDate(expiresAt),
-          activatedBy: email.toLowerCase().trim()
+        // Enable offline persistence for better user experience
+        db.enablePersistence().catch((err) => {
+          console.log("Firestore persistence failed: ", err);
         });
 
-        // Update local license data
-        const updatedLicense = {
-          ...license,
-          activatedAt: firebase.firestore.Timestamp.fromDate(now),
-          expiresAt: firebase.firestore.Timestamp.fromDate(expiresAt)
-        };
-        
-        saveLicenseLocally(updatedLicense, doc.id);
-        localStorage.setItem('activationAttempts', '0'); // Reset attempts on success
+        // Elements (main)
+        const appTitle = document.getElementById("appTitle");
+        const themeBtns = document.querySelectorAll(".theme-btn");
+        const statusBadge = document.getElementById("statusBadge");
+        const trialNotification = document.getElementById("trialNotification");
+        const trialDays = document.getElementById("trialDays");
+        const clickCounter = document.getElementById("clickCounter");
 
-        return { success: true, message: 'License activated successfully' };
+        // Activation modal
+        const proModalBackdrop = document.getElementById("proModalBackdrop");
+        const licenseEmail = document.getElementById("licenseEmail");
+        const licenseKeyInput = document.getElementById("licenseKeyInput");
+        const modalActivateBtn = document.getElementById("modalActivateBtn");
+        const modalCloseBtn = document.getElementById("modalCloseBtn");
+        const activationMsg = document.getElementById("activationMsg");
 
-      } catch (error) {
-        console.error('License activation error:', error);
-        return { success: false, message: error.message };
-      }
-    }
+        // Admin login modal
+        const adminLoginBackdrop =
+          document.getElementById("adminLoginBackdrop");
+        const adminEmailInput = document.getElementById("adminEmailInput");
+        const adminPasswordInput =
+          document.getElementById("adminPasswordInput");
+        const adminLoginSubmit = document.getElementById("adminLoginSubmit");
+        const adminLoginClose = document.getElementById("adminLoginClose");
+        const adminLoginMsg = document.getElementById("adminLoginMsg");
 
-    function isLicenseValid(license) {
-      if (!license.expiresAt) return false;
-      return new Date(license.expiresAt.toDate()).getTime() > Date.now();
-    }
+        // Admin fullscreen
+        const adminFullscreen = document.getElementById("adminFullscreen");
+        const adminKeysList = document.getElementById("adminKeysList");
+        const newKeyEmail = document.getElementById("newKeyEmail");
+        const newKeyDuration = document.getElementById("newKeyDuration");
+        const generateKeyBtn = document.getElementById("generateKeyBtn");
+        const closeAdminBtn = document.getElementById("closeAdminBtn");
+        const adminLogoutBtn = document.getElementById("adminLogoutBtn");
+        const exportDataBtn = document.getElementById("exportDataBtn");
+        const usersList = document.getElementById("usersList");
 
-    function saveLicenseLocally(license, docId) {
-      const licenseData = {
-        key: license.key,
-        email: license.email,
-        expiresAt: license.expiresAt.toDate().toISOString(),
-        docId: docId,
-        activatedAt: license.activatedAt ? license.activatedAt.toDate().toISOString() : null
-      };
-      localStorage.setItem(LS_ACTIVE, JSON.stringify(licenseData));
-    }
+        // Receipt form elements
+        const generateBtn = document.getElementById("generate");
+        const downloadBtn = document.getElementById("download");
+        const whatsappBtn = document.getElementById("whatsapp");
+        const copyBtn = document.getElementById("copySummary");
+        const activateBtnUI = document.getElementById("activateBtnUI");
+        const adminBtnUI = document.getElementById("adminBtnUI");
+        const preview = document.getElementById("preview");
 
-    // Admin list rendering - dynamic
-    function renderAdminKeys(){
-      // Clear existing content
-      adminKeysList.innerHTML = '';
-      
-      // Show loading state
-      adminKeysList.innerHTML = '<tr><td colspan="7" style="color:rgba(255,255,255,0.6);padding:12px;text-align:center"><span class="spinner"></span>Loading licenses...</td></tr>';
-      
-      // Fetch licenses from Firebase
-      db.collection('licenses').orderBy('createdAt', 'desc').get()
-        .then((querySnapshot) => {
-          adminKeysList.innerHTML = '';
-          
-          if(querySnapshot.empty) {
-            adminKeysList.innerHTML = '<tr><td colspan="7" style="color:rgba(255,255,255,0.6);padding:12px;text-align:center">No licenses found</td></tr>';
-            return;
+        const businessNameEl = document.getElementById("businessName");
+        const businessContactEl = document.getElementById("businessContact");
+        const businessEmailEl = document.getElementById("businessEmail");
+        const payerNameEl = document.getElementById("payerName");
+        const totalAmountEl = document.getElementById("totalAmount");
+        const amountPaidEl = document.getElementById("amountPaid");
+        const arrearsEl = document.getElementById("arrears");
+        const dateEl = document.getElementById("date");
+        const purposeEl = document.getElementById("purpose");
+        const businessLogo = document.getElementById("businessLogo");
+        const logoPreview = document.getElementById("logoPreview");
+        const signatureUpload = document.getElementById("signatureUpload");
+        const signaturePreview = document.getElementById("signaturePreview");
+
+        // State & storage keys
+        const LS_ACTIVE = "sr_activeLicense";
+        const LS_TRIAL_START = "sr_trialStart";
+        const TRIAL_DAYS = 3;
+
+        // Admin access variables
+        let clickCount = 0;
+        let clickTimeout = null;
+        const REQUIRED_CLICKS = 4;
+        const CLICK_TIMEOUT_MS = 2000; // 2 seconds to complete all clicks
+
+        // Default date to today
+        dateEl.value = new Date().toISOString().slice(0, 10);
+
+        // Initialize trial period
+        function initializeTrial() {
+          if (!localStorage.getItem(LS_TRIAL_START)) {
+            localStorage.setItem(LS_TRIAL_START, new Date().toISOString());
           }
-          
-          querySnapshot.forEach((doc) => {
-            const rec = doc.data();
-            const tr = document.createElement('tr');
-            
-            // Format dates
-            const activated = rec.activatedAt ? (new Date(rec.activatedAt.toDate())).toLocaleString() : '-';
-            const expires = rec.expiresAt ? (new Date(rec.expiresAt.toDate())).toLocaleString() : '-';
-            
-            // Determine status
-            let status = 'pending';
-            let statusText = 'Pending';
-            if (rec.activatedAt) {
-              if (new Date(rec.expiresAt.toDate()) > new Date()) {
-                status = 'active';
-                statusText = 'Active';
-              } else {
-                status = 'expired';
-                statusText = 'Expired';
-              }
+
+          const trialStart = new Date(localStorage.getItem(LS_TRIAL_START));
+          const trialEnd = new Date(
+            trialStart.getTime() + TRIAL_DAYS * 24 * 60 * 60 * 1000
+          );
+          const now = new Date();
+
+          if (now < trialEnd) {
+            // Trial is active
+            const daysLeft = Math.ceil(
+              (trialEnd - now) / (24 * 60 * 60 * 1000)
+            );
+            trialDays.textContent = daysLeft;
+            trialNotification.style.display = "block";
+          } else {
+            // Trial expired
+            trialNotification.style.display = "none";
+            // Check if user has active license
+            if (!getCurrentActivation()) {
+              // Disable pro features
+              disableProFeatures();
             }
-            
-            tr.innerHTML = `
-              <td style="padding:8px;max-width:180px;word-break:break-word">${escapeHtml(rec.email || '(no email)')}</td>
-              <td style="padding:8px;max-width:220px;word-break:break-all">${escapeHtml(rec.key)}</td>
+          }
+        }
+
+        // Disable pro features when trial expires and no license
+        function disableProFeatures() {
+          // Add logic to disable premium features here
+          statusBadge.textContent = "🔒 Trial Expired - Activate Pro";
+          statusBadge.style.background = "rgba(239,68,68,0.2)";
+        }
+
+        // Admin access click handler
+        function handleAdminAccessClick() {
+          // Clear existing timeout
+          if (clickTimeout) {
+            clearTimeout(clickTimeout);
+          }
+
+          // Increment click count
+          clickCount++;
+
+          // Update click counter display
+          clickCounter.textContent = `${clickCount}/${REQUIRED_CLICKS}`;
+          clickCounter.style.display = "block";
+
+          // Add visual feedback
+          appTitle.style.transform = "translateX(-50%) scale(1.1)";
+          appTitle.style.color = "#fbbf24";
+          appTitle.style.textShadow = "0 0 15px rgba(251, 191, 36, 0.8)";
+
+          setTimeout(() => {
+            appTitle.style.transform = "translateX(-50%) scale(1)";
+            appTitle.style.color = "";
+            appTitle.style.textShadow = "";
+          }, 200);
+
+          // Check if we reached the required number of clicks
+          if (clickCount >= REQUIRED_CLICKS) {
+            // Reset counter
+            clickCount = 0;
+            clickCounter.style.display = "none";
+
+            // Show admin login
+            showAdminLogin();
+
+            // Success animation
+            appTitle.style.transform = "translateX(-50%) scale(1.2)";
+            appTitle.style.color = "#22c55e";
+            appTitle.style.textShadow = "0 0 20px rgba(34, 197, 94, 1)";
+
+            setTimeout(() => {
+              appTitle.style.transform = "translateX(-50%) scale(1)";
+              appTitle.style.color = "";
+              appTitle.style.textShadow = "";
+            }, 1000);
+          } else {
+            // Set timeout to reset counter if user doesn't complete in time
+            clickTimeout = setTimeout(() => {
+              clickCount = 0;
+              clickCounter.style.display = "none";
+
+              // Reset animation
+              appTitle.style.transform = "translateX(-50%) scale(1)";
+              appTitle.style.color = "";
+              appTitle.style.textShadow = "";
+            }, CLICK_TIMEOUT_MS);
+          }
+        }
+
+        // Theme switcher
+        function setTheme(theme) {
+          themeBtns.forEach((b) => b.classList.remove("active"));
+          if (theme === "green") {
+            document.getElementById("themeGreen").classList.add("active");
+            document.documentElement.style.setProperty("--grad1", "#059669");
+            document.documentElement.style.setProperty("--grad2", "#10b981");
+            document.documentElement.style.setProperty("--grad3", "#06b6d4");
+            document.documentElement.style.setProperty(
+              "--accent-yellow",
+              "#f59e0b"
+            );
+            document.documentElement.style.setProperty(
+              "--accent-blue",
+              "#3b82f6"
+            );
+          } else if (theme === "gold") {
+            document.getElementById("themeGold").classList.add("active");
+            document.documentElement.style.setProperty("--grad1", "#d97706");
+            document.documentElement.style.setProperty("--grad2", "#f59e0b");
+            document.documentElement.style.setProperty("--grad3", "#eab308");
+            document.documentElement.style.setProperty(
+              "--accent-yellow",
+              "#eab308"
+            );
+            document.documentElement.style.setProperty(
+              "--accent-blue",
+              "#3b82f6"
+            );
+          } else {
+            document.getElementById("themeBlue").classList.add("active");
+            document.documentElement.style.setProperty("--grad1", "#1e3a8a");
+            document.documentElement.style.setProperty("--grad2", "#3b82f6");
+            document.documentElement.style.setProperty("--grad3", "#fbbf24");
+            document.documentElement.style.setProperty(
+              "--accent-yellow",
+              "#fbbf24"
+            );
+            document.documentElement.style.setProperty(
+              "--accent-blue",
+              "#3b82f6"
+            );
+          }
+        }
+        themeBtns.forEach((btn) =>
+          btn.addEventListener("click", () => setTheme(btn.dataset.theme))
+        );
+        setTheme("blue");
+
+        // File preview helper
+        function setupFilePreview(
+          inputEl,
+          previewEl,
+          setDataFn,
+          opt = { maxWidth: 140 }
+        ) {
+          inputEl.addEventListener("change", function () {
+            const file = this.files && this.files[0];
+            if (!file) {
+              setDataFn(null);
+              previewEl.textContent = "No image uploaded";
+              return;
+            }
+            const reader = new FileReader();
+            reader.onload = (e) => {
+              const dataURL = e.target.result;
+              setDataFn(dataURL);
+              previewEl.innerHTML = "";
+              const img = document.createElement("img");
+              img.src = dataURL;
+              img.alt = "Preview";
+              img.style.maxWidth = (opt.maxWidth || 140) + "px";
+              previewEl.appendChild(img);
+
+              const removeBtn = document.createElement("button");
+              removeBtn.type = "button";
+              removeBtn.className = "remove-btn";
+              removeBtn.innerText = "Remove";
+              removeBtn.onclick = () => {
+                setDataFn(null);
+                inputEl.value = "";
+                previewEl.textContent = "No image uploaded";
+              };
+              previewEl.appendChild(removeBtn);
+            };
+            reader.readAsDataURL(file);
+          });
+        }
+
+        let logoDataURL = null;
+        let signatureDataURL = null;
+        setupFilePreview(businessLogo, logoPreview, (v) => (logoDataURL = v), {
+          maxWidth: 140,
+        });
+        setupFilePreview(
+          signatureUpload,
+          signaturePreview,
+          (v) => (signatureDataURL = v),
+          { maxWidth: 160 }
+        );
+
+        // Arrears auto-calc: arrears = total - paid
+        function updateArrears() {
+          const total = parseFloat(totalAmountEl.value) || 0;
+          const paid = parseFloat(amountPaidEl.value) || 0;
+          const diff = total - paid;
+          arrearsEl.value = diff.toFixed(2);
+        }
+        totalAmountEl.addEventListener("input", updateArrears);
+        amountPaidEl.addEventListener("input", updateArrears);
+
+        // Generate SR-XXXX-XXXX-XXXX
+        function generateSRKey() {
+          const chunk = () =>
+            Math.random()
+              .toString(36)
+              .substr(2, 5)
+              .toUpperCase()
+              .replace(/[^A-Z0-9]/g, "A")
+              .padEnd(5, "A");
+          return `SR-${chunk()}-${chunk()}-${chunk()}`;
+        }
+
+        // Update status badge based on active license
+        function isActivationValid(rec) {
+          if (!rec || !rec.expiresAt) return false;
+          return new Date(rec.expiresAt).getTime() > Date.now();
+        }
+
+        function getCurrentActivation() {
+          try {
+            const raw = localStorage.getItem(LS_ACTIVE);
+            if (!raw) return null;
+            const cur = JSON.parse(raw);
+            if (isActivationValid(cur)) return cur;
+          } catch (e) {}
+          return null;
+        }
+
+        function updateStatusBadge() {
+          const cur = getCurrentActivation();
+          if (cur && isActivationValid(cur)) {
+            const daysLeft = Math.ceil(
+              (new Date(cur.expiresAt).getTime() - Date.now()) /
+                (24 * 3600 * 1000)
+            );
+            statusBadge.textContent = `🔓 Pro — ${cur.email} (${daysLeft} day${
+              daysLeft !== 1 ? "s" : ""
+            } left)`;
+            statusBadge.style.background = "rgba(34,197,94,0.2)";
+            trialNotification.style.display = "none";
+          } else {
+            // Check if trial is active
+            const trialStart = localStorage.getItem(LS_TRIAL_START);
+            if (trialStart) {
+              const trialEnd = new Date(
+                new Date(trialStart).getTime() +
+                  TRIAL_DAYS * 24 * 60 * 60 * 1000
+              );
+              if (new Date() < trialEnd) {
+                const daysLeft = Math.ceil(
+                  (trialEnd - new Date()) / (24 * 60 * 60 * 1000)
+                );
+                statusBadge.textContent = `🔓 Trial — ${daysLeft} day${
+                  daysLeft !== 1 ? "s" : ""
+                } left`;
+                statusBadge.style.background = "rgba(251,191,36,0.2)";
+              } else {
+                statusBadge.textContent = `🔒 Trial Expired - Activate Pro`;
+                statusBadge.style.background = "rgba(239,68,68,0.2)";
+              }
+            } else {
+              statusBadge.textContent = `🔒 Pro: Not activated`;
+              statusBadge.style.background = "rgba(255,255,255,0.06)";
+            }
+          }
+        }
+
+        // Enhanced license activation function with better error handling
+        async function activateLicense(email, key) {
+          try {
+            // Add rate limiting check
+            const activationAttempts =
+              localStorage.getItem("activationAttempts") || 0;
+            if (activationAttempts > 5) {
+              throw new Error(
+                "Too many activation attempts. Please try again later."
+              );
+            }
+
+            // Clean inputs
+            const cleanEmail = email.toLowerCase().trim();
+            const cleanKey = key.trim().toUpperCase();
+
+            if (!cleanEmail || !cleanKey) {
+              throw new Error("Please enter both email and activation key.");
+            }
+
+            console.log("Searching for license:", {
+              email: cleanEmail,
+              key: cleanKey,
+            });
+
+            // Query Firestore for the license
+            const querySnapshot = await db
+              .collection("licenses")
+              .where("key", "==", cleanKey)
+              .where("email", "==", cleanEmail)
+              .get();
+
+            if (querySnapshot.empty) {
+              localStorage.setItem(
+                "activationAttempts",
+                parseInt(activationAttempts) + 1
+              );
+              throw new Error(
+                "Invalid activation key or email. Please check and try again."
+              );
+            }
+
+            const doc = querySnapshot.docs[0];
+            const license = doc.data();
+            const docId = doc.id;
+
+            console.log("Found license:", license);
+
+            // Check if license is already activated and valid
+            if (license.activatedAt && isLicenseValid(license)) {
+              // License already active and valid
+              console.log("License already active and valid");
+              saveLicenseLocally(license, docId);
+              return {
+                success: true,
+                message: "License activated successfully!",
+              };
+            }
+
+            // Check if license is already used (activated but expired)
+            if (license.activatedAt) {
+              throw new Error(
+                "This license has already been used and has expired."
+              );
+            }
+
+            // Activate the license
+            const now = new Date();
+            const expiresAt = new Date(
+              now.getTime() + license.durationDays * 24 * 60 * 60 * 1000
+            );
+
+            console.log("Activating license with expiry:", expiresAt);
+
+            await db
+              .collection("licenses")
+              .doc(docId)
+              .update({
+                activatedAt: firebase.firestore.Timestamp.fromDate(now),
+                expiresAt: firebase.firestore.Timestamp.fromDate(expiresAt),
+                activatedBy: cleanEmail,
+              });
+
+            // Update local license data
+            const updatedLicense = {
+              ...license,
+              activatedAt: firebase.firestore.Timestamp.fromDate(now),
+              expiresAt: firebase.firestore.Timestamp.fromDate(expiresAt),
+            };
+
+            saveLicenseLocally(updatedLicense, docId);
+            localStorage.setItem("activationAttempts", "0"); // Reset attempts on success
+
+            return {
+              success: true,
+              message: "License activated successfully! Pro features unlocked.",
+            };
+          } catch (error) {
+            console.error("License activation error:", error);
+
+            // Handle specific Firebase errors
+            if (error.code === "permission-denied") {
+              return {
+                success: false,
+                message:
+                  "Permission denied. Please contact administrator or check Firestore rules.",
+              };
+            } else if (error.code === "unavailable") {
+              return {
+                success: false,
+                message:
+                  "Network error. Please check your internet connection and try again.",
+              };
+            }
+
+            return { success: false, message: error.message };
+          }
+        }
+
+        function isLicenseValid(license) {
+          if (!license.expiresAt) return false;
+          try {
+            const expiryDate = license.expiresAt.toDate
+              ? license.expiresAt.toDate()
+              : new Date(license.expiresAt);
+            return expiryDate.getTime() > Date.now();
+          } catch (e) {
+            console.error("Error checking license validity:", e);
+            return false;
+          }
+        }
+
+        function saveLicenseLocally(license, docId) {
+          try {
+            const licenseData = {
+              key: license.key,
+              email: license.email,
+              expiresAt: license.expiresAt.toDate
+                ? license.expiresAt.toDate().toISOString()
+                : license.expiresAt,
+              docId: docId,
+              activatedAt: license.activatedAt
+                ? license.activatedAt.toDate
+                  ? license.activatedAt.toDate().toISOString()
+                  : license.activatedAt
+                : null,
+            };
+            localStorage.setItem(LS_ACTIVE, JSON.stringify(licenseData));
+            console.log("License saved locally:", licenseData);
+          } catch (error) {
+            console.error("Error saving license locally:", error);
+          }
+        }
+
+        // Admin list rendering - dynamic
+        function renderAdminKeys() {
+          // Clear existing content
+          adminKeysList.innerHTML = "";
+
+          // Show loading state
+          adminKeysList.innerHTML =
+            '<tr><td colspan="7" style="color:rgba(255,255,255,0.6);padding:12px;text-align:center"><span class="spinner"></span>Loading licenses...</td></tr>';
+
+          // Fetch licenses from Firebase
+          db.collection("licenses")
+            .orderBy("createdAt", "desc")
+            .get()
+            .then((querySnapshot) => {
+              adminKeysList.innerHTML = "";
+
+              if (querySnapshot.empty) {
+                adminKeysList.innerHTML =
+                  '<tr><td colspan="7" style="color:rgba(255,255,255,0.6);padding:12px;text-align:center">No licenses found</td></tr>';
+                return;
+              }
+
+              querySnapshot.forEach((doc) => {
+                const rec = doc.data();
+                const tr = document.createElement("tr");
+
+                // Format dates
+                const activated = rec.activatedAt
+                  ? new Date(rec.activatedAt.toDate()).toLocaleString()
+                  : "-";
+                const expires = rec.expiresAt
+                  ? new Date(rec.expiresAt.toDate()).toLocaleString()
+                  : "-";
+
+                // Determine status
+                let status = "pending";
+                let statusText = "Pending";
+                if (rec.activatedAt) {
+                  if (new Date(rec.expiresAt.toDate()) > new Date()) {
+                    status = "active";
+                    statusText = "Active";
+                  } else {
+                    status = "expired";
+                    statusText = "Expired";
+                  }
+                }
+
+                tr.innerHTML = `
+              <td style="padding:8px;max-width:180px;word-break:break-word">${escapeHtml(
+                rec.email || "(no email)"
+              )}</td>
+              <td style="padding:8px;max-width:220px;word-break:break-all">${escapeHtml(
+                rec.key
+              )}</td>
               <td style="padding:8px">${rec.durationDays}d</td>
               <td style="padding:8px">${escapeHtml(activated)}</td>
               <td style="padding:8px">${escapeHtml(expires)}</td>
               <td style="padding:8px"><span class="key-status ${status}">${statusText}</span></td>
               <td style="padding:8px;white-space:nowrap">
-                <button data-key="${rec.key}" class="copyKey" style="margin-right:6px">Copy</button>
-                <button data-id="${doc.id}" class="deleteKey danger" style="border:none;padding:6px 8px;border-radius:6px">Delete</button>
+                <button data-key="${
+                  rec.key
+                }" class="copyKey" style="margin-right:6px">Copy</button>
+                <button data-id="${
+                  doc.id
+                }" class="deleteKey danger" style="border:none;padding:6px 8px;border-radius:6px">Delete</button>
               </td>
             `;
-            adminKeysList.appendChild(tr);
-          });
+                adminKeysList.appendChild(tr);
+              });
 
-          // attach handlers
-          document.querySelectorAll('.copyKey').forEach(btn => {
-            btn.onclick = () => {
-              const key = btn.getAttribute('data-key');
-              navigator.clipboard.writeText(key).then(()=> alert('Key copied to clipboard')).catch(()=> alert('Copy failed'));
-            };
-          });
-          
-          document.querySelectorAll('.deleteKey').forEach(btn => {
-            btn.onclick = ()=> {
-              if(!confirm('Delete this license? This action cannot be undone.')) return;
-              const id = btn.getAttribute('data-id');
-              
-              // Show loading
-              btn.innerHTML = '<span class="spinner"></span>Deleting...';
-              btn.disabled = true;
-              
-              db.collection('licenses').doc(id).delete()
-                .then(() => {
-                  renderAdminKeys(); // Refresh the list
-                })
-                .catch((error) => {
-                  console.error('Error deleting license: ', error);
-                  alert('Error deleting license. Please try again.');
-                  renderAdminKeys(); // Refresh anyway
-                });
-            };
-          });
-        })
-        .catch((error) => {
-          console.error('Error getting licenses: ', error);
-          adminKeysList.innerHTML = '<tr><td colspan="7" style="color:#ef4444;padding:12px;text-align:center">Error loading licenses</td></tr>';
-        });
-    }
+              // attach handlers
+              document.querySelectorAll(".copyKey").forEach((btn) => {
+                btn.onclick = () => {
+                  const key = btn.getAttribute("data-key");
+                  navigator.clipboard
+                    .writeText(key)
+                    .then(() => alert("Key copied to clipboard"))
+                    .catch(() => alert("Copy failed"));
+                };
+              });
 
-    // Generate key (admin)
-    generateKeyBtn.addEventListener('click', ()=>{
-      const email = (newKeyEmail.value || '').trim();
-      const durationDays = Number(newKeyDuration.value || 30);
-      
-      if(!email){ alert('Please enter an email to assign the key to.'); return; }
-      if(![15,30,60].includes(durationDays)){ alert('Invalid duration'); return; }
-      
-      const key = generateSRKey();
-      const now = new Date();
-      
-      // Show loading
-      generateKeyBtn.innerHTML = '<span class="spinner"></span>Generating...';
-      generateKeyBtn.disabled = true;
-      
-      // Save to Firebase
-      db.collection('licenses').add({
-        key,
-        email,
-        durationDays,
-        createdAt: firebase.firestore.Timestamp.fromDate(now),
-        activatedAt: null,
-        expiresAt: null
-      })
-      .then(() => {
-        newKeyEmail.value = '';
-        renderAdminKeys(); // Refresh the list
-        alert(`Key created for ${email}\nKey: ${key}`);
-      })
-      .catch((error) => {
-        console.error('Error adding license: ', error);
-        alert('Error creating license. Please try again.');
-      })
-      .finally(() => {
-        generateKeyBtn.innerHTML = 'Generate Key';
-        generateKeyBtn.disabled = false;
-      });
-    });
+              document.querySelectorAll(".deleteKey").forEach((btn) => {
+                btn.onclick = () => {
+                  if (
+                    !confirm(
+                      "Delete this license? This action cannot be undone."
+                    )
+                  )
+                    return;
+                  const id = btn.getAttribute("data-id");
 
-    // Activation modal logic
-    function showProModal(){ 
-      proModalBackdrop.classList.add('show'); 
-      proModalBackdrop.setAttribute('aria-hidden','false'); 
-      activationMsg.textContent=''; 
-      licenseEmail.value=''; 
-      licenseKeyInput.value=''; 
-      licenseEmail.focus(); 
-    }
-    
-    function hideProModal(){ 
-      proModalBackdrop.classList.remove('show'); 
-      proModalBackdrop.setAttribute('aria-hidden','true'); 
-      activationMsg.textContent=''; 
-    }
+                  // Show loading
+                  btn.innerHTML = '<span class="spinner"></span>Deleting...';
+                  btn.disabled = true;
 
-    activateBtnUI.addEventListener('click', showProModal);
-    modalCloseBtn.addEventListener('click', hideProModal);
+                  db.collection("licenses")
+                    .doc(id)
+                    .delete()
+                    .then(() => {
+                      renderAdminKeys(); // Refresh the list
+                    })
+                    .catch((error) => {
+                      console.error("Error deleting license: ", error);
+                      alert("Error deleting license. Please try again.");
+                      renderAdminKeys(); // Refresh anyway
+                    });
+                };
+              });
+            })
+            .catch((error) => {
+              console.error("Error getting licenses: ", error);
+              adminKeysList.innerHTML =
+                '<tr><td colspan="7" style="color:#ef4444;padding:12px;text-align:center">Error loading licenses: ' +
+                error.message +
+                "</td></tr>";
+            });
+        }
 
-    modalActivateBtn.addEventListener('click', async ()=>{
-      const email = (licenseEmail.value||'').trim().toLowerCase();
-      const key = (licenseKeyInput.value||'').trim();
-      
-      if(!email || !key){ 
-        activationMsg.style.color='#fca5a5'; 
-        activationMsg.textContent='Enter email and activation key.'; 
-        return; 
-      }
-      
-      // Show loading
-      modalActivateBtn.innerHTML = '<span class="spinner"></span>Activating...';
-      modalActivateBtn.disabled = true;
-      
-      const result = await activateLicense(email, key);
-      
-      if (result.success) {
-        activationMsg.style.color = '#86efac';
-        activationMsg.textContent = result.message;
-        updateStatusBadge();
-        setTimeout(hideProModal, 1500);
-      } else {
-        activationMsg.style.color='#fca5a5';
-        activationMsg.textContent=result.message;
-      }
-      
-      // Reset button
-      modalActivateBtn.innerHTML = 'Activate';
-      modalActivateBtn.disabled = false;
-    });
+        // Generate key (admin)
+        generateKeyBtn.addEventListener("click", () => {
+          const email = (newKeyEmail.value || "").trim();
+          const durationDays = Number(newKeyDuration.value || 30);
 
-    // Admin login
-    function showAdminLogin(){ 
-      adminLoginBackdrop.classList.add('show'); 
-      adminLoginBackdrop.setAttribute('aria-hidden','false'); 
-      adminLoginMsg.textContent=''; 
-      adminEmailInput.value=''; 
-      adminPasswordInput.value=''; 
-      adminEmailInput.focus(); 
-    }
-    
-    function hideAdminLogin(){ 
-      adminLoginBackdrop.classList.remove('show'); 
-      adminLoginBackdrop.setAttribute('aria-hidden','true'); 
-      adminLoginMsg.textContent=''; 
-    }
-
-    // Remove the direct admin button click handler and replace with title click
-    appTitle.addEventListener('click', handleAdminAccessClick);
-    adminLoginClose.addEventListener('click', hideAdminLogin);
-
-    adminLoginSubmit.addEventListener('click', ()=> {
-      const email = (adminEmailInput.value||'').trim();
-      const password = (adminPasswordInput.value||'').trim();
-      
-      if(!email || !password){ 
-        adminLoginMsg.style.color='#fca5a5'; 
-        adminLoginMsg.textContent='Enter email and password.'; 
-        return; 
-      }
-      
-      // Show loading
-      adminLoginSubmit.innerHTML = '<span class="spinner"></span>Logging in...';
-      adminLoginSubmit.disabled = true;
-      
-      // Sign in with Firebase Auth
-      auth.signInWithEmailAndPassword(email, password)
-        .then((userCredential) => {
-          // Signed in
-          adminLoginMsg.style.color = '#86efac';
-          adminLoginMsg.textContent = 'Login successful';
-          
-          setTimeout(() => {
-            hideAdminLogin();
-            openAdminFullscreen();
-          }, 500);
-        })
-        .catch((error) => {
-          console.error('Login error:', error);
-          adminLoginMsg.style.color='#fca5a5';
-          
-          if (error.code === 'auth/user-not-found' || error.code === 'auth/wrong-password') {
-            adminLoginMsg.textContent = 'Invalid email or password';
-          } else {
-            adminLoginMsg.textContent = 'Login failed. Please try again.';
+          if (!email) {
+            alert("Please enter an email to assign the key to.");
+            return;
           }
-        })
-        .finally(() => {
-          adminLoginSubmit.innerHTML = 'Login';
-          adminLoginSubmit.disabled = false;
+          if (![15, 30, 60].includes(durationDays)) {
+            alert("Invalid duration");
+            return;
+          }
+
+          const key = generateSRKey();
+          const now = new Date();
+
+          // Show loading
+          generateKeyBtn.innerHTML =
+            '<span class="spinner"></span>Generating...';
+          generateKeyBtn.disabled = true;
+
+          // Save to Firebase
+          db.collection("licenses")
+            .add({
+              key,
+              email: email.toLowerCase().trim(),
+              durationDays,
+              createdAt: firebase.firestore.Timestamp.fromDate(now),
+              activatedAt: null,
+              expiresAt: null,
+            })
+            .then(() => {
+              newKeyEmail.value = "";
+              renderAdminKeys(); // Refresh the list
+              alert(`Key created for ${email}\nKey: ${key}`);
+            })
+            .catch((error) => {
+              console.error("Error adding license: ", error);
+              alert("Error creating license: " + error.message);
+            })
+            .finally(() => {
+              generateKeyBtn.innerHTML = "Generate Key";
+              generateKeyBtn.disabled = false;
+            });
         });
-    });
 
-    function openAdminFullscreen(){
-      adminFullscreen.classList.add('show');
-      adminFullscreen.setAttribute('aria-hidden','false');
-      renderAdminKeys();
-      renderUsersList();
-    }
-    
-    function closeAdminFullscreen(){
-      adminFullscreen.classList.remove('show');
-      adminFullscreen.setAttribute('aria-hidden','true');
-    }
+        // Activation modal logic
+        function showProModal() {
+          proModalBackdrop.classList.add("show");
+          proModalBackdrop.setAttribute("aria-hidden", "false");
+          activationMsg.textContent = "";
+          licenseEmail.value = "";
+          licenseKeyInput.value = "";
+          licenseEmail.focus();
+        }
 
-    closeAdminBtn.addEventListener('click', closeAdminFullscreen);
-    
-    adminLogoutBtn.addEventListener('click', () => {
-      auth.signOut()
-        .then(() => {
-          closeAdminFullscreen();
-        })
-        .catch((error) => {
-          console.error('Logout error:', error);
+        function hideProModal() {
+          proModalBackdrop.classList.remove("show");
+          proModalBackdrop.setAttribute("aria-hidden", "true");
+          activationMsg.textContent = "";
+        }
+
+        activateBtnUI.addEventListener("click", showProModal);
+        modalCloseBtn.addEventListener("click", hideProModal);
+
+        modalActivateBtn.addEventListener("click", async () => {
+          const email = (licenseEmail.value || "").trim();
+          const key = (licenseKeyInput.value || "").trim();
+
+          if (!email || !key) {
+            activationMsg.style.color = "#fca5a5";
+            activationMsg.textContent = "Enter email and activation key.";
+            return;
+          }
+
+          // Show loading
+          modalActivateBtn.innerHTML =
+            '<span class="spinner"></span>Activating...';
+          modalActivateBtn.disabled = true;
+          activationMsg.style.color = "#fff";
+          activationMsg.textContent = "Activating license...";
+
+          const result = await activateLicense(email, key);
+
+          if (result.success) {
+            activationMsg.style.color = "#86efac";
+            activationMsg.textContent = result.message;
+            updateStatusBadge();
+            setTimeout(hideProModal, 2000);
+          } else {
+            activationMsg.style.color = "#fca5a5";
+            activationMsg.textContent = result.message;
+          }
+
+          // Reset button
+          modalActivateBtn.innerHTML = "Activate";
+          modalActivateBtn.disabled = false;
         });
-    });
 
-    // Export data functionality
-    exportDataBtn.addEventListener('click', async () => {
-      try {
-        const querySnapshot = await db.collection('licenses').get();
-        const data = [];
-        
-        querySnapshot.forEach((doc) => {
-          data.push({
-            id: doc.id,
-            ...doc.data(),
-            createdAt: doc.data().createdAt?.toDate(),
-            activatedAt: doc.data().activatedAt?.toDate(),
-            expiresAt: doc.data().expiresAt?.toDate()
-          });
+        // Admin login
+        function showAdminLogin() {
+          adminLoginBackdrop.classList.add("show");
+          adminLoginBackdrop.setAttribute("aria-hidden", "false");
+          adminLoginMsg.textContent = "";
+          adminEmailInput.value = "";
+          adminPasswordInput.value = "";
+          adminEmailInput.focus();
+        }
+
+        function hideAdminLogin() {
+          adminLoginBackdrop.classList.remove("show");
+          adminLoginBackdrop.setAttribute("aria-hidden", "true");
+          adminLoginMsg.textContent = "";
+        }
+
+        // Remove the direct admin button click handler and replace with title click
+        appTitle.addEventListener("click", handleAdminAccessClick);
+        adminLoginClose.addEventListener("click", hideAdminLogin);
+
+        adminLoginSubmit.addEventListener("click", () => {
+          const email = (adminEmailInput.value || "").trim();
+          const password = (adminPasswordInput.value || "").trim();
+
+          if (!email || !password) {
+            adminLoginMsg.style.color = "#fca5a5";
+            adminLoginMsg.textContent = "Enter email and password.";
+            return;
+          }
+
+          // Show loading
+          adminLoginSubmit.innerHTML =
+            '<span class="spinner"></span>Logging in...';
+          adminLoginSubmit.disabled = true;
+
+          // Sign in with Firebase Auth
+          auth
+            .signInWithEmailAndPassword(email, password)
+            .then((userCredential) => {
+              // Signed in
+              adminLoginMsg.style.color = "#86efac";
+              adminLoginMsg.textContent = "Login successful";
+
+              setTimeout(() => {
+                hideAdminLogin();
+                openAdminFullscreen();
+              }, 500);
+            })
+            .catch((error) => {
+              console.error("Login error:", error);
+              adminLoginMsg.style.color = "#fca5a5";
+
+              if (
+                error.code === "auth/user-not-found" ||
+                error.code === "auth/wrong-password"
+              ) {
+                adminLoginMsg.textContent = "Invalid email or password";
+              } else {
+                adminLoginMsg.textContent = "Login failed. Please try again.";
+              }
+            })
+            .finally(() => {
+              adminLoginSubmit.innerHTML = "Login";
+              adminLoginSubmit.disabled = false;
+            });
         });
-        
-        const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
-        const url = URL.createObjectURL(blob);
-        const a = document.createElement('a');
-        a.href = url;
-        a.download = `licenses-export-${new Date().toISOString().split('T')[0]}.json`;
-        a.click();
-        URL.revokeObjectURL(url);
-        
-      } catch (error) {
-        console.error('Export error:', error);
-        alert('Error exporting data');
-      }
-    });
 
-    // User management
-    function renderUsersList() {
-      const currentUser = auth.currentUser;
-      if (currentUser) {
-        usersList.innerHTML = `
+        function openAdminFullscreen() {
+          adminFullscreen.classList.add("show");
+          adminFullscreen.setAttribute("aria-hidden", "false");
+          renderAdminKeys();
+          renderUsersList();
+        }
+
+        function closeAdminFullscreen() {
+          adminFullscreen.classList.remove("show");
+          adminFullscreen.setAttribute("aria-hidden", "true");
+        }
+
+        closeAdminBtn.addEventListener("click", closeAdminFullscreen);
+
+        adminLogoutBtn.addEventListener("click", () => {
+          auth
+            .signOut()
+            .then(() => {
+              closeAdminFullscreen();
+            })
+            .catch((error) => {
+              console.error("Logout error:", error);
+            });
+        });
+
+        // Export data functionality
+        exportDataBtn.addEventListener("click", async () => {
+          try {
+            const querySnapshot = await db.collection("licenses").get();
+            const data = [];
+
+            querySnapshot.forEach((doc) => {
+              data.push({
+                id: doc.id,
+                ...doc.data(),
+                createdAt: doc.data().createdAt?.toDate(),
+                activatedAt: doc.data().activatedAt?.toDate(),
+                expiresAt: doc.data().expiresAt?.toDate(),
+              });
+            });
+
+            const blob = new Blob([JSON.stringify(data, null, 2)], {
+              type: "application/json",
+            });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement("a");
+            a.href = url;
+            a.download = `licenses-export-${
+              new Date().toISOString().split("T")[0]
+            }.json`;
+            a.click();
+            URL.revokeObjectURL(url);
+          } catch (error) {
+            console.error("Export error:", error);
+            alert("Error exporting data");
+          }
+        });
+
+        // User management
+        function renderUsersList() {
+          const currentUser = auth.currentUser;
+          if (currentUser) {
+            usersList.innerHTML = `
           <tr>
             <td>${currentUser.email}</td>
             <td>${new Date().toLocaleString()}</td>
             <td><span class="key-status active">Online</span></td>
           </tr>
         `;
-      }
-    }
-
-    // Check auth state
-    auth.onAuthStateChanged((user) => {
-      if (user) {
-        // User is signed in
-        console.log('Admin user signed in:', user.email);
-      } else {
-        // User is signed out
-        console.log('Admin user signed out');
-        closeAdminFullscreen();
-      }
-    });
-
-    // Enhanced error handling
-    function setupFirebaseErrorHandling() {
-      // Auth state error handling
-      auth.onAuthStateChanged((user) => {
-        if (user) {
-          console.log('User signed in:', user.email);
-        } else {
-          console.log('User signed out');
+          }
         }
-      }, (error) => {
-        console.error('Auth state error:', error);
-      });
 
-      // Firestore error handling
-      db.collection('licenses').onSnapshot(() => {
-        // Success
-      }, (error) => {
-        console.error('Firestore error:', error);
-        if (error.code === 'permission-denied') {
-          alert('Permission denied. Please contact administrator.');
+        // Check auth state
+        auth.onAuthStateChanged((user) => {
+          if (user) {
+            // User is signed in
+            console.log("Admin user signed in:", user.email);
+          } else {
+            // User is signed out
+            console.log("Admin user signed out");
+            closeAdminFullscreen();
+          }
+        });
+
+        // Enhanced error handling
+        function setupFirebaseErrorHandling() {
+          // Auth state error handling
+          auth.onAuthStateChanged(
+            (user) => {
+              if (user) {
+                console.log("User signed in:", user.email);
+              } else {
+                console.log("User signed out");
+              }
+            },
+            (error) => {
+              console.error("Auth state error:", error);
+            }
+          );
+
+          // Firestore error handling
+          db.collection("licenses").onSnapshot(
+            () => {
+              // Success
+            },
+            (error) => {
+              console.error("Firestore error:", error);
+              if (error.code === "permission-denied") {
+                alert("Permission denied. Please contact administrator.");
+              }
+            }
+          );
         }
-      });
-    }
 
-    // Setup admin user (run once to create admin)
-    async function setupAdminUser() {
-      const adminEmail = "admin@smartreceipt.com";
-      const adminPassword = "admin123"; // Change this in production!
-      
-      try {
-        // Try to create admin user
-        const userCredential = await auth.createUserWithEmailAndPassword(adminEmail, adminPassword);
-        console.log('Admin user created successfully:', userCredential.user.email);
-        
-      } catch (error) {
-        if (error.code === 'auth/email-already-in-use') {
-          console.log('Admin user already exists');
-        } else {
-          console.error('Error creating admin user:', error);
+        // Setup admin user (run once to create admin)
+        async function setupAdminUser() {
+          const adminEmail = "admin@smartreceipt.com";
+          const adminPassword = "admin123"; // Change this in production!
+
+          try {
+            // Try to create admin user
+            const userCredential = await auth.createUserWithEmailAndPassword(
+              adminEmail,
+              adminPassword
+            );
+            console.log(
+              "Admin user created successfully:",
+              userCredential.user.email
+            );
+          } catch (error) {
+            if (error.code === "auth/email-already-in-use") {
+              console.log("Admin user already exists");
+            } else {
+              console.error("Error creating admin user:", error);
+            }
+          }
         }
-      }
-    }
 
-    // Initialize trial and activation status
-    initializeTrial();
-    updateStatusBadge();
-    setupFirebaseErrorHandling();
+        // Initialize trial and activation status
+        initializeTrial();
+        updateStatusBadge();
+        setupFirebaseErrorHandling();
 
-    // Uncomment the line below to create the admin user (run once)
-    // setupAdminUser();
+        // Uncomment the line below to create the admin user (run once)
+        // setupAdminUser();
 
-    // PDF generation - professional layout (kept intact)
-    async function generatePdf(data){
-      const { jsPDF } = window.jspdf;
-      const doc = new jsPDF({unit:'pt', format:'a4'});
-      const pageWidth = doc.internal.pageSize.getWidth();
+        // PDF generation - professional layout (kept intact)
+        async function generatePdf(data) {
+          const { jsPDF } = window.jspdf;
+          const doc = new jsPDF({ unit: "pt", format: "a4" });
+          const pageWidth = doc.internal.pageSize.getWidth();
 
-      // Header: logo (centered top) and business name
-      const headerY = 36;
-      if(logoDataURL){
-        const logoW = 100;
-        const logoH = 100;
-        const logoX = (pageWidth - logoW) / 2;
-        try{ doc.addImage(logoDataURL, 'PNG', logoX, headerY, logoW, logoH); }
-        catch(e){ try{ doc.addImage(logoDataURL, 'JPEG', logoX, headerY, logoW, logoH); } catch(err){} }
-      }
+          // Header: logo (centered top) and business name
+          const headerY = 36;
+          if (logoDataURL) {
+            const logoW = 100;
+            const logoH = 100;
+            const logoX = (pageWidth - logoW) / 2;
+            try {
+              doc.addImage(logoDataURL, "PNG", logoX, headerY, logoW, logoH);
+            } catch (e) {
+              try {
+                doc.addImage(logoDataURL, "JPEG", logoX, headerY, logoW, logoH);
+              } catch (err) {}
+            }
+          }
 
-      const nameY = logoDataURL ? headerY + 120 : headerY + 10;
-      doc.setFont("helvetica","bold"); doc.setFontSize(18);
-      doc.text(data.businessName || 'Business Name', pageWidth/2, nameY, {align:'center'});
-      doc.setFont("helvetica","normal"); doc.setFontSize(11);
-      const contactLine = `${data.businessContact || ''}${data.businessContact && data.businessEmail ? ' | ' : ''}${data.businessEmail || ''}`;
-      doc.text(contactLine.trim(), pageWidth/2, nameY + 16, {align:'center'});
+          const nameY = logoDataURL ? headerY + 120 : headerY + 10;
+          doc.setFont("helvetica", "bold");
+          doc.setFontSize(18);
+          doc.text(data.businessName || "Business Name", pageWidth / 2, nameY, {
+            align: "center",
+          });
+          doc.setFont("helvetica", "normal");
+          doc.setFontSize(11);
+          const contactLine = `${data.businessContact || ""}${
+            data.businessContact && data.businessEmail ? " | " : ""
+          }${data.businessEmail || ""}`;
+          doc.text(contactLine.trim(), pageWidth / 2, nameY + 16, {
+            align: "center",
+          });
 
-      // Title
-      doc.setFont("helvetica","bold"); doc.setFontSize(12);
-      doc.text('OFFICIAL RECEIPT', pageWidth/2, nameY + 36, {align:'center'});
-      doc.setLineWidth(0.8); doc.line(48, nameY + 44, pageWidth - 48, nameY + 44);
+          // Title
+          doc.setFont("helvetica", "bold");
+          doc.setFontSize(12);
+          doc.text("OFFICIAL RECEIPT", pageWidth / 2, nameY + 36, {
+            align: "center",
+          });
+          doc.setLineWidth(0.8);
+          doc.line(48, nameY + 44, pageWidth - 48, nameY + 44);
 
-      // Body
-      let cursorY = nameY + 70; doc.setFont("helvetica","normal"); doc.setFontSize(11);
-      const boxX = 48, boxW = pageWidth - 96, boxY = cursorY, boxH = 170;
-      doc.setDrawColor(200); doc.setLineWidth(0.6); doc.roundedRect(boxX, boxY, boxW, boxH, 6, 6, 'S');
+          // Body
+          let cursorY = nameY + 70;
+          doc.setFont("helvetica", "normal");
+          doc.setFontSize(11);
+          const boxX = 48,
+            boxW = pageWidth - 96,
+            boxY = cursorY,
+            boxH = 170;
+          doc.setDrawColor(200);
+          doc.setLineWidth(0.6);
+          doc.roundedRect(boxX, boxY, boxW, boxH, 6, 6, "S");
 
-      let rowY = boxY + 24;
-      doc.setFont("helvetica","bold"); doc.text('Payer Name:', boxX+18, rowY); doc.text(data.payerName || '-', boxX + boxW - 18, rowY, {align:'right'}); rowY += 22;
-      doc.text('Total Amount:', boxX+18, rowY); doc.text(`GHS ${data.totalAmount.toFixed(2)}`, boxX + boxW - 18, rowY, {align:'right'}); rowY += 22;
-      doc.text('Amount Paid:', boxX+18, rowY); doc.text(`GHS ${data.amountPaid.toFixed(2)}`, boxX + boxW - 18, rowY, {align:'right'}); rowY += 22;
-      doc.text('Arrears:', boxX+18, rowY); doc.text(`GHS ${data.arrears.toFixed(2)}`, boxX + boxW - 18, rowY, {align:'right'}); rowY += 22;
-      doc.text('Date:', boxX+18, rowY); doc.text(data.date, boxX + boxW - 18, rowY, {align:'right'}); rowY += 22;
-      doc.setFont("helvetica","normal"); doc.text('Purpose:', boxX+18, rowY);
-      const purposeLines = doc.splitTextToSize(data.purpose || '-', boxW - 36);
-      doc.text(purposeLines, boxX+18, rowY + 16);
-      cursorY = boxY + boxH + 12;
+          let rowY = boxY + 24;
+          doc.setFont("helvetica", "bold");
+          doc.text("Payer Name:", boxX + 18, rowY);
+          doc.text(data.payerName || "-", boxX + boxW - 18, rowY, {
+            align: "right",
+          });
+          rowY += 22;
+          doc.text("Total Amount:", boxX + 18, rowY);
+          doc.text(
+            `GHS ${data.totalAmount.toFixed(2)}`,
+            boxX + boxW - 18,
+            rowY,
+            { align: "right" }
+          );
+          rowY += 22;
+          doc.text("Amount Paid:", boxX + 18, rowY);
+          doc.text(
+            `GHS ${data.amountPaid.toFixed(2)}`,
+            boxX + boxW - 18,
+            rowY,
+            { align: "right" }
+          );
+          rowY += 22;
+          doc.text("Arrears:", boxX + 18, rowY);
+          doc.text(`GHS ${data.arrears.toFixed(2)}`, boxX + boxW - 18, rowY, {
+            align: "right",
+          });
+          rowY += 22;
+          doc.text("Date:", boxX + 18, rowY);
+          doc.text(data.date, boxX + boxW - 18, rowY, { align: "right" });
+          rowY += 22;
+          doc.setFont("helvetica", "normal");
+          doc.text("Purpose:", boxX + 18, rowY);
+          const purposeLines = doc.splitTextToSize(
+            data.purpose || "-",
+            boxW - 36
+          );
+          doc.text(purposeLines, boxX + 18, rowY + 16);
+          cursorY = boxY + boxH + 12;
 
-      // Amount in words (simple)
-      try {
-        doc.setFontSize(10);
-        doc.text('Amount (in words): ' + amountInWords(data.amountPaid), boxX+18, cursorY);
-      } catch(e) {}
-      cursorY += 28;
+          // Amount in words (simple)
+          try {
+            doc.setFontSize(10);
+            doc.text(
+              "Amount (in words): " + amountInWords(data.amountPaid),
+              boxX + 18,
+              cursorY
+            );
+          } catch (e) {}
+          cursorY += 28;
 
-      // Signature
-      if(signatureDataURL){
-        const sigW = 140, sigH = 60;
-        const sigX = pageWidth - 48 - sigW, sigY = cursorY;
-        doc.setFont("helvetica","normal"); doc.text('Authorized Signature:', sigX - 10, sigY - 6, {align:'right'});
-        try{ doc.addImage(signatureDataURL, 'PNG', sigX, sigY, sigW, sigH); }
-        catch(e){ try{ doc.addImage(signatureDataURL, 'JPEG', sigX, sigY, sigW, sigH); }catch(err){} }
-        cursorY += sigH + 16;
-      }
+          // Signature
+          if (signatureDataURL) {
+            const sigW = 140,
+              sigH = 60;
+            const sigX = pageWidth - 48 - sigW,
+              sigY = cursorY;
+            doc.setFont("helvetica", "normal");
+            doc.text("Authorized Signature:", sigX - 10, sigY - 6, {
+              align: "right",
+            });
+            try {
+              doc.addImage(signatureDataURL, "PNG", sigX, sigY, sigW, sigH);
+            } catch (e) {
+              try {
+                doc.addImage(signatureDataURL, "JPEG", sigX, sigY, sigW, sigH);
+              } catch (err) {}
+            }
+            cursorY += sigH + 16;
+          }
 
-      // Footer
-      doc.setLineWidth(0.6); doc.line(48, cursorY, pageWidth - 48, cursorY);
-      cursorY += 14; doc.setFont("helvetica","italic"); doc.setFontSize(10);
-      doc.text('Thank you for your business!', pageWidth / 2, cursorY, {align:'center'});
-      cursorY += 12; doc.text('Powered by SmartReceipt', pageWidth / 2, cursorY, {align:'center'});
+          // Footer
+          doc.setLineWidth(0.6);
+          doc.line(48, cursorY, pageWidth - 48, cursorY);
+          cursorY += 14;
+          doc.setFont("helvetica", "italic");
+          doc.setFontSize(10);
+          doc.text("Thank you for your business!", pageWidth / 2, cursorY, {
+            align: "center",
+          });
+          cursorY += 12;
+          doc.text("Powered by SmartReceipt", pageWidth / 2, cursorY, {
+            align: "center",
+          });
 
-      return doc.output('blob');
-    }
+          return doc.output("blob");
+        }
 
-    // Basic amount->words (for english Ghana Cedis)
-    function amountInWords(n){
-      const small = ['Zero','One','Two','Three','Four','Five','Six','Seven','Eight','Nine','Ten','Eleven','Twelve','Thirteen','Fourteen','Fifteen','Sixteen','Seventeen','Eighteen','Nineteen'];
-      const tens = ['','','Twenty','Thirty','Forty','Fifty','Sixty','Seventy','Eighty','Ninety'];
-      function inWords(num){ num = Math.floor(Math.abs(num)); if(num < 20) return small[num]; if(num < 100) return tens[Math.floor(num/10)] + (num % 10 ? '-' + small[num % 10] : ''); if(num < 1000) return small[Math.floor(num/100)] + ' Hundred' + (num % 100 ? ' and ' + inWords(num % 100) : ''); if(num < 1000000) return inWords(Math.floor(num/1000)) + ' Thousand' + (num % 1000 ? ' ' + inWords(num % 1000) : ''); return num.toString(); }
-      return inWords(Math.floor(n)) + ' Ghana Cedis';
-    }
+        // Basic amount->words (for english Ghana Cedis)
+        function amountInWords(n) {
+          const small = [
+            "Zero",
+            "One",
+            "Two",
+            "Three",
+            "Four",
+            "Five",
+            "Six",
+            "Seven",
+            "Eight",
+            "Nine",
+            "Ten",
+            "Eleven",
+            "Twelve",
+            "Thirteen",
+            "Fourteen",
+            "Fifteen",
+            "Sixteen",
+            "Seventeen",
+            "Eighteen",
+            "Nineteen",
+          ];
+          const tens = [
+            "",
+            "",
+            "Twenty",
+            "Thirty",
+            "Forty",
+            "Fifty",
+            "Sixty",
+            "Seventy",
+            "Eighty",
+            "Ninety",
+          ];
+          function inWords(num) {
+            num = Math.floor(Math.abs(num));
+            if (num < 20) return small[num];
+            if (num < 100)
+              return (
+                tens[Math.floor(num / 10)] +
+                (num % 10 ? "-" + small[num % 10] : "")
+              );
+            if (num < 1000)
+              return (
+                small[Math.floor(num / 100)] +
+                " Hundred" +
+                (num % 100 ? " and " + inWords(num % 100) : "")
+              );
+            if (num < 1000000)
+              return (
+                inWords(Math.floor(num / 1000)) +
+                " Thousand" +
+                (num % 1000 ? " " + inWords(num % 1000) : "")
+              );
+            return num.toString();
+          }
+          return inWords(Math.floor(n)) + " Ghana Cedis";
+        }
 
-    // Generate event
-    generateBtn.addEventListener('click', async ()=>{
-      const data = {
-        businessName: businessNameEl.value.trim(),
-        businessContact: businessContactEl.value.trim(),
-        businessEmail: businessEmailEl.value.trim(),
-        payerName: payerNameEl.value.trim(),
-        totalAmount: Number(totalAmountEl.value) || 0,
-        amountPaid: Number(amountPaidEl.value) || 0,
-        arrears: Number(arrearsEl.value) || 0,
-        date: dateEl.value || new Date().toISOString().slice(0,10),
-        purpose: purposeEl.value.trim()
-      };
-      if(!data.businessName || !data.payerName){ return alert('Please fill Business Name and Payer Name.'); }
-      preview.textContent = 'Generating PDF...';
-      try{
-        const blob = await generatePdf(data);
-        if(window._lastPdf) URL.revokeObjectURL(window._lastPdf);
-        window._lastPdf = URL.createObjectURL(blob);
-        downloadBtn.disabled = false;
-        downloadBtn.onclick = ()=> {
-          const a = document.createElement('a'); a.href = window._lastPdf; a.download = `receipt_${Date.now()}.pdf`; a.click();
-        };
-        preview.innerHTML = `✅ PDF ready — <a href="${window._lastPdf}" target="_blank">Open PDF</a> — click Download to save.`;
-        alert('Receipt generated.');
-      }catch(err){
-        console.error(err);
-        preview.textContent = 'Error generating PDF. Check console.';
-      }
-    });
+        // Generate event
+        generateBtn.addEventListener("click", async () => {
+          const data = {
+            businessName: businessNameEl.value.trim(),
+            businessContact: businessContactEl.value.trim(),
+            businessEmail: businessEmailEl.value.trim(),
+            payerName: payerNameEl.value.trim(),
+            totalAmount: Number(totalAmountEl.value) || 0,
+            amountPaid: Number(amountPaidEl.value) || 0,
+            arrears: Number(arrearsEl.value) || 0,
+            date: dateEl.value || new Date().toISOString().slice(0, 10),
+            purpose: purposeEl.value.trim(),
+          };
+          if (!data.businessName || !data.payerName) {
+            return alert("Please fill Business Name and Payer Name.");
+          }
+          preview.textContent = "Generating PDF...";
+          try {
+            const blob = await generatePdf(data);
+            if (window._lastPdf) URL.revokeObjectURL(window._lastPdf);
+            window._lastPdf = URL.createObjectURL(blob);
+            downloadBtn.disabled = false;
+            downloadBtn.onclick = () => {
+              const a = document.createElement("a");
+              a.href = window._lastPdf;
+              a.download = `receipt_${Date.now()}.pdf`;
+              a.click();
+            };
+            preview.innerHTML = `✅ PDF ready — <a href="${window._lastPdf}" target="_blank">Open PDF</a> — click Download to save.`;
+            alert("Receipt generated.");
+          } catch (err) {
+            console.error(err);
+            preview.textContent = "Error generating PDF. Check console.";
+          }
+        });
 
-    // WhatsApp share (text only)
-    whatsappBtn.addEventListener('click', ()=>{
-      const d = { business: businessNameEl.value, payer: payerNameEl.value, total: Number(totalAmountEl.value)||0, paid: Number(amountPaidEl.value)||0, arrears: Number(arrearsEl.value)||0, date: dateEl.value||'' };
-      const text = `Receipt from ${d.business}\nPayer: ${d.payer}\nTotal: GHS ${d.total.toFixed(2)}\nPaid: GHS ${d.paid.toFixed(2)}\nArrears: GHS ${d.arrears.toFixed(2)}\nDate: ${d.date}`;
-      window.open('https://wa.me/?text='+encodeURIComponent(text),'_blank');
-    });
+        // WhatsApp share (text only)
+        whatsappBtn.addEventListener("click", () => {
+          const d = {
+            business: businessNameEl.value,
+            payer: payerNameEl.value,
+            total: Number(totalAmountEl.value) || 0,
+            paid: Number(amountPaidEl.value) || 0,
+            arrears: Number(arrearsEl.value) || 0,
+            date: dateEl.value || "",
+          };
+          const text = `Receipt from ${d.business}\nPayer: ${
+            d.payer
+          }\nTotal: GHS ${d.total.toFixed(2)}\nPaid: GHS ${d.paid.toFixed(
+            2
+          )}\nArrears: GHS ${d.arrears.toFixed(2)}\nDate: ${d.date}`;
+          window.open(
+            "https://wa.me/?text=" + encodeURIComponent(text),
+            "_blank"
+          );
+        });
 
-    // Copy summary
-    copyBtn.addEventListener('click', async ()=>{
-      const txt = `Receipt — ${businessNameEl.value} | ${payerNameEl.value} | Total: GHS ${Number(totalAmountEl.value||0).toFixed(2)} | Paid: GHS ${Number(amountPaidEl.value||0).toFixed(2)} | Arrears: GHS ${Number(arrearsEl.value||0).toFixed(2)} | Date: ${dateEl.value} | Purpose: ${purposeEl.value}`;
-      try{
-        await navigator.clipboard.writeText(txt);
-        alert('Summary copied to clipboard');
-      }catch(e){
-        alert('Copy failed — please select and copy manually:\n' + txt);
-      }
-    });
+        // Copy summary
+        copyBtn.addEventListener("click", async () => {
+          const txt = `Receipt — ${businessNameEl.value} | ${
+            payerNameEl.value
+          } | Total: GHS ${Number(totalAmountEl.value || 0).toFixed(
+            2
+          )} | Paid: GHS ${Number(amountPaidEl.value || 0).toFixed(
+            2
+          )} | Arrears: GHS ${Number(arrearsEl.value || 0).toFixed(
+            2
+          )} | Date: ${dateEl.value} | Purpose: ${purposeEl.value}`;
+          try {
+            await navigator.clipboard.writeText(txt);
+            alert("Summary copied to clipboard");
+          } catch (e) {
+            alert("Copy failed — please select and copy manually:\n" + txt);
+          }
+        });
 
-    // small helper to escape HTML in table cells
-    function escapeHtml(s){
-      if(!s && s !== 0) return '';
-      return String(s).replace(/[&<>"']/g, function(m){ return ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[m]); });
-    }
-
-  })();
-  </script>
-</body>
+        // small helper to escape HTML in table cells
+        function escapeHtml(s) {
+          if (!s && s !== 0) return "";
+          return String(s).replace(/[&<>"']/g, function (m) {
+            return {
+              "&": "&amp;",
+              "<": "&lt;",
+              ">": "&gt;",
+              '"': "&quot;",
+              "'": "&#39;",
+            }[m];
+          });
+        }
+      })();
+    </script>
+  </body>
 </html>
